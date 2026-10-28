@@ -1,0 +1,47 @@
+/* Pricing tickets, cut to the Figma ticket (Code-layer node 25:219). Plain CSS
+   under the Tailwind loader, so class names are global, hence pricing-.
+
+   .pricing-paper is the ticket's paper, masked to its edge: concave 20px
+   corners, 13px notches either side of the tear, and the stamp window
+   (pricing-stamp.svg) punched straight through, so the glass in the window
+   shows what lies behind. From lg the ticket lies down at 872 x 338: window
+   at 32,32 (372 x 274), tear at x 437 with its perforation punched through
+   (6px slots, 10px dash + round caps, 26px pitch, from 22px down). Below lg
+   it stands up: the window spans the top 24px in, and the tear sits under
+   it (the perforation there is drawn in the markup). */
+.pricing-paper {
+  --tear: calc((100cqw - 48px) * 274 / 372 + 48px);
+  mask-image:
+    url("/figma/pricing-stamp.svg"),
+    radial-gradient(circle 20px at 0 0, #0000 98%, #000),
+    radial-gradient(circle 20px at 100% 0, #0000 98%, #000),
+    radial-gradient(circle 20px at 0 100%, #0000 98%, #000),
+    radial-gradient(circle 20px at 100% 100%, #0000 98%, #000),
+    radial-gradient(circle 13px at 0 var(--tear), #0000 98%, #000),
+    radial-gradient(circle 13px at 100% var(--tear), #0000 98%, #000);
+  mask-position: 24px 24px, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0;
+  mask-size: calc(100% - 48px) auto, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%;
+  mask-repeat: no-repeat;
+  mask-composite: exclude, intersect, intersect, intersect, intersect, intersect, add;
+}
+@media (min-width: 64rem) {
+  .pricing-paper {
+    mask-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='295'%3E%3Cg%3E%3Crect y='0' width='6' height='16' rx='3'/%3E%3Crect y='26' width='6' height='16' rx='3'/%3E%3Crect y='52' width='6' height='16' rx='3'/%3E%3Crect y='78' width='6' height='16' rx='3'/%3E%3Crect y='104' width='6' height='16' rx='3'/%3E%3Crect y='130' width='6' height='16' rx='3'/%3E%3Crect y='156' width='6' height='16' rx='3'/%3E%3Crect y='182' width='6' height='16' rx='3'/%3E%3Crect y='208' width='6' height='16' rx='3'/%3E%3Crect y='234' width='6' height='16' rx='3'/%3E%3Crect y='260' width='6' height='16' rx='3'/%3E%3Crect y='286' width='6' height='9' rx='3'/%3E%3C/g%3E%3C/svg%3E"),
+      url("/figma/pricing-stamp.svg"),
+      radial-gradient(circle 20px at 0 0, #0000 98%, #000),
+      radial-gradient(circle 20px at 100% 0, #0000 98%, #000),
+      radial-gradient(circle 20px at 0 100%, #0000 98%, #000),
+      radial-gradient(circle 20px at 100% 100%, #0000 98%, #000),
+      radial-gradient(circle 13px at 437px 0, #0000 98%, #000),
+      radial-gradient(circle 13px at 437px 100%, #0000 98%, #000);
+    mask-position: 434px 22px, 32px 32px, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0;
+    mask-size: 6px 295px, 372px 274px, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%;
+    mask-composite: exclude, exclude, intersect, intersect, intersect, intersect, intersect, add;
+  }
+}
+
+/* The glass in the window: the stamp shape again, over a blurred backdrop. */
+.pricing-stamp {
+  mask: url("/figma/pricing-stamp.svg") 0 0 / 100% 100% no-repeat;
+}

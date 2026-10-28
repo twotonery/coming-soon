@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "tt-next", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev", "--", "-p", "4318"], "port": 4318 }
+  ]
+}

@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------
+   Twotonery tokens, from the Figma landing page (Code-layer 8:6).
+---------------------------------------------------------------- */
+@theme inline {
+  --font-display: var(--font-epilogue);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@theme {
+  --color-ink: #0e1f21;        /* text, pricing ground */
+  --color-muted: #7b7b7b;      /* secondary text on paper */
+  --color-silver: #c6c6c6;     /* "Our services" label */
+  --color-line: #dcdcdc;       /* hairline rule on paper */
+  --color-line-2: #e5e5e5;     /* FAQ card border */
+  --color-teal: #1f4b50;       /* footer ground, button text on white */
+  --color-polaroid: #efe6df;   /* testimonial photo mats */
+}
+
+html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+/* Lenis does the smoothing once it is running; native smooth scroll would fight it */
+html.lenis { scroll-behavior: auto; }
+body { font-family: var(--font-sans), system-ui, sans-serif; }
+
+@layer components {
+  /* paper texture: the Figma "Section" fill, 40% over white */
+  .paper { position: relative; isolation: isolate; background-color: #fff; }
+  .paper::before {
+    content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background: url("/figma/paper.png") center / cover; opacity: .4;
+  }
+  /* the same texture multiplied into the footer teal */
+  .paper-multiply { position: relative; isolation: isolate; }
+  .paper-multiply::before {
+    content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background: url("/figma/paper.png") center / cover; opacity: .8; mix-blend-mode: multiply;
+  }
+}
+
+
+/* a stamp pressed onto the footer wordmark: drops in large, squashes, settles */
+@keyframes stamp-in {
+  0% { opacity: 0; transform: scale(1.4) rotate(-6deg); }
+  55% { opacity: 1; transform: scale(.94) rotate(1deg); }
+  100% { opacity: 1; transform: none; }
+}
+.stamp-in { animation: stamp-in 450ms cubic-bezier(.2, .8, .2, 1) both; }
+
+/* testimonial polaroids drift on their own slow loops (--dx/--dy and timing set per card) */
+@keyframes drift {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  30% { transform: translate3d(var(--dx), calc(var(--dy) * -1), 0); }
+  65% { transform: translate3d(calc(var(--dx) * -.6), var(--dy), 0); }
+}
+.drift { animation: drift 12s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { transition-duration: 1ms !important; animation: none !important; }
+}
