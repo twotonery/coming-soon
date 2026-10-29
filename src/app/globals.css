@@ -31,22 +31,8 @@ body { font-family: var(--font-sans), system-ui, sans-serif; }
     content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
     background: url("/figma/paper.png") center / cover; opacity: .4;
   }
-  /* the same texture multiplied into the footer teal */
-  .paper-multiply { position: relative; isolation: isolate; }
-  .paper-multiply::before {
-    content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
-    background: url("/figma/paper.png") center / cover; opacity: .8; mix-blend-mode: multiply;
-  }
 }
 
-
-/* a stamp pressed onto the footer wordmark: drops in large, squashes, settles */
-@keyframes stamp-in {
-  0% { opacity: 0; transform: scale(1.4) rotate(-6deg); }
-  55% { opacity: 1; transform: scale(.94) rotate(1deg); }
-  100% { opacity: 1; transform: none; }
-}
-.stamp-in { animation: stamp-in 450ms cubic-bezier(.2, .8, .2, 1) both; }
 
 /* testimonial polaroids drift on their own slow loops (--dx/--dy and timing set per card) */
 @keyframes drift {
