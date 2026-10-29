@@ -9,7 +9,7 @@ import { useEffect } from "react";
 // scroll-padding-top); with reduced motion it steps aside.
 export function SmoothScroll() {
   useEffect(() => {
-    const lenis = new Lenis({ autoRaf: true, anchors: true, lerp: 0.1 });
+    const lenis = new Lenis({ autoRaf: true, anchors: true, lerp: 0.075 });
     return () => lenis.destroy();
   }, []);
   return null;
