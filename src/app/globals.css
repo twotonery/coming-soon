@@ -12,7 +12,6 @@
 @theme {
   --color-ink: #0e1f21;        /* text, pricing ground */
   --color-muted: #7b7b7b;      /* secondary text on paper */
-  --color-silver: #c6c6c6;     /* "Our services" label */
   --color-line: #dcdcdc;       /* hairline rule on paper */
   --color-line-2: #e5e5e5;     /* FAQ card border */
   --color-teal: #1f4b50;       /* footer ground, button text on white */
