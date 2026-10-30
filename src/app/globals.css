@@ -33,13 +33,30 @@ body { font-family: var(--font-sans), system-ui, sans-serif; }
 }
 
 
-/* testimonial polaroids drift on their own slow loops (--dx/--dy and timing set per card) */
-@keyframes drift {
-  0%, 100% { transform: translate3d(0, 0, 0); }
-  30% { transform: translate3d(var(--dx), calc(var(--dy) * -1), 0); }
-  65% { transform: translate3d(calc(var(--dx) * -.6), var(--dy), 0); }
+/* Reveals as sections come on screen (<Reveals /> sets data-shown).
+   data-reveal="up": the element rises 18px out of a slight blur.
+   data-reveal="words": each word of <Words /> slides up from behind its own
+   line, one after the other (--i is the word's place).
+   --delay holds an element back after its neighbours. Don't put data-reveal on
+   anything with transitions of its own (hover fades): wrap it instead. */
+[data-reveal] { --reveal-ease: cubic-bezier(.22, 1, .36, 1); }
+[data-reveal="up"] {
+  opacity: 0; translate: 0 18px; filter: blur(6px);
+  transition: opacity .9s var(--reveal-ease), translate .9s var(--reveal-ease), filter .9s var(--reveal-ease);
+  transition-delay: var(--delay, 0ms);
 }
-.drift { animation: drift 12s ease-in-out infinite; }
+[data-reveal="up"][data-shown] { opacity: 1; translate: none; filter: none; }
+.reveal-word {
+  display: inline-block; overflow: clip; vertical-align: top; text-indent: 0;
+  /* room for descenders inside the clip */
+  padding-bottom: .12em; margin-bottom: -.12em;
+}
+.reveal-word > span {
+  display: inline-block; translate: 0 110%;
+  transition: translate 1s var(--reveal-ease);
+  transition-delay: calc(var(--delay, 0ms) + var(--i) * 28ms);
+}
+[data-reveal="words"][data-shown] .reveal-word > span { translate: none; }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }

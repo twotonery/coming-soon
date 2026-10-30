@@ -7,6 +7,7 @@ import { Navbar } from "@/components/landing/Navbar";
 import { Pricing } from "@/components/landing/Pricing";
 import { Services } from "@/components/landing/Services";
 import { Testimonials } from "@/components/landing/Testimonials";
+import { Reveals } from "@/components/Reveals";
 
 export default function Home() {
   return (
@@ -22,6 +23,7 @@ export default function Home() {
         <Faq />
       </main>
       <Footer />
+      <Reveals />
     </>
   );
 }

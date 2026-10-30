@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useId, useState } from "react";
-import { DISPLAY_CENTRED, GUTTER } from "./shared";
+import { DISPLAY_CENTRED, GUTTER, Words, delay } from "./shared";
 
 // Only the first answer is in the Figma file; the rest are draft copy.
 const QUESTIONS = [
@@ -23,15 +23,15 @@ export function Faq() {
   return (
     <section className={`paper flex flex-col items-center gap-14 overflow-clip py-20 lg:py-[120px] ${GUTTER}`}>
       <div className="flex w-[664px] max-w-full flex-col items-center gap-6 text-center">
-        <p className="text-[16px] leading-6">Common Questions Answered</p>
-        <h2 className={DISPLAY_CENTRED}>Everything you need<br /> to know first.</h2>
+        <p data-reveal="up" className="text-[16px] leading-6">Common Questions Answered</p>
+        <h2 data-reveal="words" style={delay(80)} className={DISPLAY_CENTRED}><Words text={"Everything you need\nto know first."} /></h2>
       </div>
 
       <ul className="flex w-[664px] max-w-full flex-col gap-3">
         {QUESTIONS.map((item, i) => {
           const isOpen = open === i;
           return (
-            <li key={i} className="group relative border border-line-2 bg-white px-[19px] py-[15px] text-[16px] leading-6">
+            <li key={i} data-reveal="up" style={delay(Math.min(i, 5) * 60)} className="group relative border border-line-2 bg-white px-[19px] py-[15px] text-[16px] leading-6">
               <h3>
                 {/* the button's hit area covers the whole card */}
                 <button

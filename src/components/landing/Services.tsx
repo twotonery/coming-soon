@@ -17,6 +17,10 @@ const SERVICES = [
 // pinned, and on the louver that closes it into Pricing.
 const STEP = 90;
 const OUTRO = 90;
+// The louver starts a fifth of the way into the outro; from there on Pricing
+// (pulled up over the section's foot) rises under it, so the screen is never
+// left a whole page of bare ink.
+const LOUVER_FROM = 0.2;
 
 // The louver, after elementis.co: thin horizontal slats, each filling from its
 // own bottom edge upwards, the bottom slat first and the top one last, all
@@ -81,8 +85,8 @@ export function Services() {
       });
       setActive(Math.min(Math.floor(x + 0.5), SERVICES.length - 1));
 
-      // the last service holds for the first fifth of the outro
-      if (ink.current) louver(ink.current, clamp01(((progress - split) / (1 - split) - 0.2) / 0.8));
+      // the last service holds for the start of the outro
+      if (ink.current) louver(ink.current, clamp01(((progress - split) / (1 - split) - LOUVER_FROM) / (1 - LOUVER_FROM)));
     };
     const schedule = () => { frame ||= requestAnimationFrame(update); };
     update();
@@ -101,7 +105,10 @@ export function Services() {
       id="services"
       data-nav-tone="dark"
       className="relative text-white"
-      style={{ height: `calc(max(100svh, 680px) + ${(SERVICES.length - 1) * STEP + OUTRO}svh)` }}
+      style={{
+        height: `calc(max(100svh, 680px) + ${(SERVICES.length - 1) * STEP + OUTRO}svh)`,
+        marginBottom: `-${OUTRO * (1 - LOUVER_FROM)}svh`,
+      }}
     >
       <div className="sticky top-0 h-svh min-h-[680px] overflow-clip">
         {SERVICES.map((s, k) => (

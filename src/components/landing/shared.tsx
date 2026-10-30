@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { Fragment, type CSSProperties } from "react";
 
 // Placeholder until there is a booking link.
 export const BOOKING_HREF = "mailto:hello@twotonery.com";
@@ -19,13 +20,10 @@ export function HLine({ className = "" }: { className?: string }) {
   );
 }
 
-// line-v.svg is a 942px horizontal stroke, turned upright around its centre.
+// The upright rule (line-v.svg's white @ 20%), run the full height of its frame
+// rather than the svg's fixed 942px, so it reaches the edges on tall screens.
 export function VLine({ left }: { left: string }) {
-  return (
-    <div aria-hidden className="absolute top-1/2 h-px w-[942px] -translate-1/2 rotate-90" style={{ left }}>
-      <Image src="/figma/line-v.svg" alt="" fill />
-    </div>
-  );
+  return <div aria-hidden className="absolute inset-y-0 w-px -translate-x-1/2 bg-white/20" style={{ left }} />;
 }
 
 export function Dot({ left, top }: { left: string; top: string }) {
@@ -38,6 +36,33 @@ export function Painting({ scrim, sizes, preload }: { scrim: string; sizes: stri
     <>
       <Image src="/figma/hero.png" alt="" fill sizes={sizes} preload={preload} className="object-cover" />
       <div className={`absolute inset-0 ${scrim}`} />
+    </>
+  );
+}
+
+// Holds a reveal back (ms) after the ones around it; see [data-reveal] in globals.css.
+export const delay = (ms: number) => ({ "--delay": `${ms}ms` }) as CSSProperties;
+
+// Splits a line of copy into words for data-reveal="words"; a \n breaks the
+// line. Screen readers get the sentence whole.
+export function Words({ text }: { text: string }) {
+  let i = 0;
+  return (
+    <>
+      <span className="sr-only">{text.replace(/\n/g, " ")}</span>
+      <span aria-hidden>
+        {text.split("\n").map((line, l) => (
+          <Fragment key={l}>
+            {l > 0 && <br />}
+            {line.split(" ").map((word, k) => (
+              <Fragment key={k}>
+                {k > 0 && " "}
+                <span className="reveal-word"><span style={{ "--i": i++ } as CSSProperties}>{word}</span></span>
+              </Fragment>
+            ))}
+          </Fragment>
+        ))}
+      </span>
     </>
   );
 }
