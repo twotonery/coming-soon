@@ -49,11 +49,12 @@ export function Footer() {
               <ul className="flex flex-col gap-2">
                 {SOCIAL.map((s, i) => (
                   <li key={s} data-reveal="up" style={delay(60 + i * 60)} className="flex flex-col gap-2">
-                    <a href="#" className="group flex items-center gap-2.5 text-[20px] leading-[26px]">
+                    <a href="#" className="group peer flex items-center gap-2.5 text-[20px] leading-[26px]">
                       <span className="flex-1">{s}</span>
                       <Image src="/figma/arrow-out.svg" alt="" width={16} height={16} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
                     </a>
-                    <div aria-hidden className="relative h-px w-full">
+                    {/* the rule turns full white while its link is hovered or focused */}
+                    <div aria-hidden className="relative h-px w-full transition-colors duration-300 peer-hover:bg-white peer-focus-visible:bg-white">
                       <Image src={i === 0 ? "/figma/rule-first.svg" : "/figma/rule.svg"} alt="" fill />
                     </div>
                   </li>

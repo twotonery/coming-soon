@@ -40,9 +40,14 @@ export function Faq() {
                   aria-expanded={isOpen}
                   aria-controls={`${id}-a${i}`}
                   onClick={() => setOpen(isOpen ? null : i)}
-                  className="w-full cursor-pointer text-left transition-colors group-hover:text-teal after:absolute after:inset-0"
+                  className="flex w-full cursor-pointer items-center justify-between gap-4 text-left transition-colors group-hover:text-teal after:absolute after:inset-0"
                 >
                   {item.q}
+                  {/* plus, whose upright bar turns flat into a minus while open */}
+                  <span aria-hidden className="relative size-3 shrink-0">
+                    <span className="absolute inset-x-0 top-1/2 h-[1.5px] -translate-y-1/2 bg-current" />
+                    <span className={`absolute inset-y-0 left-1/2 w-[1.5px] -translate-x-1/2 bg-current transition-transform duration-300 ease-out ${isOpen ? "rotate-90" : ""}`} />
+                  </span>
                 </button>
               </h3>
               <div
