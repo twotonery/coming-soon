@@ -35,6 +35,10 @@ body { font-family: var(--font-sans), system-ui, sans-serif; }
 
 /* Reveals as sections come on screen (<Reveals /> sets data-shown).
    data-reveal="up": the element rises 18px out of a slight blur.
+   data-reveal="fade": opacity only, for things that must not move or filter
+   while they come in (the pricing tickets: Safari draws their masked paper
+   and frosted glass on separate layers, and a moving ancestor leaves the two
+   out of step).
    data-reveal="words": each word of <Words /> slides up from behind its own
    line, one after the other (--i is the word's place).
    --delay holds an element back after its neighbours. Don't put data-reveal on
@@ -46,6 +50,8 @@ body { font-family: var(--font-sans), system-ui, sans-serif; }
   transition-delay: var(--delay, 0ms);
 }
 [data-reveal="up"][data-shown] { opacity: 1; translate: none; filter: none; }
+[data-reveal="fade"] { opacity: 0; transition: opacity .9s var(--reveal-ease) var(--delay, 0ms); }
+[data-reveal="fade"][data-shown] { opacity: 1; }
 .reveal-word {
   display: inline-block; overflow: clip; vertical-align: top; text-indent: 0;
   /* room for descenders inside the clip */

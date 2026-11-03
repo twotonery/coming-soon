@@ -181,7 +181,7 @@ export function Pricing() {
                 tabIndex={i === active ? 0 : -1}
                 onClick={() => setActive(i)}
                 onKeyDown={onTabKey}
-                className={`flex min-w-0 flex-1 flex-wrap items-center gap-x-8 border-t pt-6 text-left text-[16px] leading-6 transition-colors ${i === active ? "border-white" : "border-transparent hover:border-white/30"}`}
+                className={`flex min-w-0 flex-1 flex-wrap items-center gap-x-8 border-t pt-6 max-sm:flex-col max-sm:items-start text-left text-[16px] leading-6 transition-colors ${i === active ? "border-white" : "border-transparent hover:border-white/30"}`}
               >
                 <span className="flex-1 text-white">{p.tier}</span>
                 <span className="whitespace-nowrap text-white/70">{p.amount}</span>
@@ -193,7 +193,9 @@ export function Pricing() {
               its paper shows through the front one's window and perforation */}
           {/* on phones the turned back ticket would poke past the screen edge,
               so it turns less there; both tickets stretch to the taller one so
-              only the back one's foot shows below the front */}
+              only the back one's foot shows below the front. Plain transform,
+              not translate/rotate: Safari keeps the masked paper and the glass
+              in step with it. */}
           <div
             onPointerDown={onDown}
             onPointerMove={onMove}
@@ -201,7 +203,7 @@ export function Pricing() {
             onPointerCancel={onUp}
             // a swipe that ends over a button or link shouldn't also press it
             onClickCapture={(e) => { if (swiped.current) { e.preventDefault(); e.stopPropagation(); swiped.current = false; } }}
-            data-reveal="up"
+            data-reveal="fade"
             style={delay(200)}
             className="grid touch-pan-y pb-10 select-none max-lg:overflow-x-clip lg:select-auto lg:pb-[62px]"
           >
@@ -210,8 +212,8 @@ export function Pricing() {
               return (
                 <div
                   key={p.tier}
-                  className={`relative [grid-area:1/1] transition-[translate,rotate] ease-out ${front && drag !== null ? "duration-0" : "duration-500"} ${front ? "z-10" : "translate-x-[3px] translate-y-[28px] rotate-1 lg:translate-x-[5.6px] lg:translate-y-[47px] lg:rotate-2"}`}
-                  style={front && drag !== null ? { translate: `${drag}px 0`, rotate: `${drag / 40}deg` } : undefined}
+                  className={`relative [grid-area:1/1] transition-transform ease-out ${front && drag !== null ? "duration-0" : "duration-500"} ${front ? "z-10" : "[transform:translate(3px,28px)_rotate(1deg)] lg:[transform:translate(5.6px,47px)_rotate(2deg)]"}`}
+                  style={front && drag !== null ? { transform: `translateX(${drag}px) rotate(${drag / 40}deg)` } : undefined}
                 >
                   <div id={`pricing-panel-${i}`} role="tabpanel" aria-labelledby={`pricing-tab-${i}`} inert={!front} className="h-full">
                     <Ticket plan={p} />
