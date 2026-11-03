@@ -71,7 +71,10 @@ function Ticket({ plan }: { plan: Plan }) {
   return (
     <article className="relative isolate flex h-full flex-col [container-type:inline-size] lg:block lg:h-[338px]">
       <span aria-hidden className={`pricing-paper absolute inset-0 -z-10 ${plan.paper}`} />
-      <div className="relative m-6 aspect-[372/274] text-white lg:absolute lg:top-8 lg:left-8 lg:m-0 lg:h-[274px] lg:w-[372px]">
+      {/* sized from the ticket's width (cqw) by the same sum as the window in
+          pricing.css, not by aspect-ratio: Safari works an aspect-ratio box's
+          height out from the full width here, before the margins come off */}
+      <div className="relative m-6 h-[calc((100cqw-48px)*274/372)] w-[calc(100cqw-48px)] shrink-0 text-white lg:absolute lg:top-8 lg:left-8 lg:m-0 lg:h-[274px] lg:w-[372px]">
         <span aria-hidden className="pricing-stamp absolute inset-0 -z-10 overflow-hidden backdrop-blur-[32.45px]">
           {/* the painting fills the stamp upright and turns with it, a quarter clockwise */}
           <span className="absolute top-1/2 left-1/2 h-[135.77%] w-[73.66%] -translate-1/2 rotate-90 bg-[url(/figma/hero.png)] bg-cover bg-center opacity-44" />
