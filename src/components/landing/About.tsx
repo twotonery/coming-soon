@@ -12,7 +12,7 @@ export function About() {
       <div className="grid gap-y-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,868px)] lg:gap-y-16">
         <p data-reveal="up" className="pt-1.5 text-[16px] leading-6 lg:w-[254px]">About</p>
         <p data-reveal="words" style={delay(80)} className={`${DISPLAY} indent-[88px]`}>
-          <Words text="Twotonery is a small, senior design partner. We work as an extension of your team, turning complex products into clear, human experiences." />
+          <Words text="Twotonery is a design partner for healthcare, medical technology, and ambitious tech companies." />
         </p>
 
         <div className="relative grid gap-y-10 border-t border-line pt-16 text-[16px] leading-6 lg:col-span-2 lg:grid-cols-subgrid">
@@ -29,15 +29,13 @@ export function About() {
             ))}
           </div>
 
-          {/* wax seal straddling the rule */}
-          <div className="absolute -top-[61px] right-0 h-[120px] w-[124px] overflow-hidden lg:-top-[98.5px] lg:right-auto lg:left-[174px] lg:h-[194px] lg:w-[200px]">
-            <Image
-              src="/figma/seal.png"
-              alt="Twotonery wax seal"
-              width={1024}
-              height={1024}
-              sizes="230px"
-              className="absolute top-[-4.59%] left-[-8.48%] h-[117.43%] w-[114.29%] max-w-none"
+          {/* wax seal straddling the rule; the art is olive, a teal hue layer (masked to the seal) recolours it */}
+          <div className="absolute -top-[64px] right-0 h-[129px] w-[124px] lg:-top-[128.5px] lg:right-auto lg:left-[145px] lg:h-[269px] lg:w-[258px]">
+            <Image src="/figma/seal-green.png" alt="Twotonery wax seal" fill sizes="258px" />
+            <div
+              aria-hidden
+              className="absolute inset-0 bg-[#28796b] mix-blend-hue"
+              style={{ maskImage: "url(/figma/seal-green.png)", maskSize: "100% 100%" }}
             />
           </div>
         </div>
