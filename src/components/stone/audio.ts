@@ -1,198 +1,241 @@
-// The slab's sound, synthesised so there are no audio files to load:
-// a low, muffled grind while the hand moves, and a soft "tok" for each strike.
-// Nothing sounds while the pointer is still.
+// The slab's sound, synthesised so there are no audio files to load.
+// Nothing sounds until the first click, and nothing while the cursor is still.
 
 export type StoneAudio = {
   /** Call from a click / tap / key handler: browsers only start audio from one. */
   unlock(): void;
-  /** 0..1, how fast the hand is moving right now; carving makes it a little fuller. */
-  setMotion(amount: number, carving: boolean): void;
+  /** 0..1, how fast the hand is moving right now. */
+  setMotion(amount: number): void;
   strike(strength?: number): void;
   setMuted(muted: boolean): void;
   destroy(): void;
 };
 
-function noiseBuffer(ctx: AudioContext, seconds: number, brown: boolean) {
-  const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * seconds), ctx.sampleRate);
-  const d = buf.getChannelData(0);
-  let last = 0;
-  for (let i = 0; i < d.length; i++) {
-    const white = Math.random() * 2 - 1;
-    if (brown) { last = (last + 0.02 * white) / 1.02; d[i] = last * 3.5; }
-    else d[i] = white;
+function rng(seed: number) {
+  return () => {
+    seed |= 0;
+    seed = seed + 1831565813 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+// One-pole lowpass, run twice round so a looped buffer joins without a click.
+function lowpassLoop(x: Float32Array, hz: number, sr: number) {
+  const k = 1 - Math.exp(-2 * Math.PI * hz / sr);
+  let y = 0;
+  for (let pass = 0; pass < 2; pass++) for (let i = 0; i < x.length; i++) {
+    y += (x[i] - y) * k;
+    if (pass) x[i] = y;
   }
-  // crossfade the tail into the head so the loop has no seam
-  const fade = Math.floor(ctx.sampleRate * 0.25);
+}
+const ROLL_SECONDS = 6;
+const TURN_HZ = 4.5; // how often the rolling "comes round": the rumble's pulse
+// Bending the stone: a dry, seamless loop of rock rolling over rock. A low
+// weight underneath, many small knocks and scrapes on top, all swelling and
+// easing on an uneven turn so it rolls instead of hissing. No air, no room.
+export function renderRoll(sr: number): Float32Array {
+  const n = Math.floor(sr * ROLL_SECONDS);
+  const rnd = rng(7741);
+  const out = new Float32Array(n);
+  const turns = Math.round(TURN_HZ * ROLL_SECONDS);
+  const weight = new Float32Array(turns), late = new Float32Array(turns);
+  for (let i = 0; i < turns; i++) {
+    weight[i] = 0.55 + rnd() * 0.45;
+    late[i] = (rnd() - 0.5) * 0.22;
+  }
+  const turning = (i: number) => {
+    const ph = i / n * turns, k = Math.floor(ph) % turns;
+    let f = ph - Math.floor(ph) - late[k];
+    f -= Math.floor(f);
+    const bump = Math.pow(Math.sin(Math.PI * Math.pow(f, 0.6)), 2);
+    const swell = 0.8 + 0.2 * Math.sin(2 * Math.PI * i * 2 / n + 1.3);
+    return (0.45 + 0.55 * bump * weight[k]) * swell;
+  };
+  const fade = Math.floor(sr * 0.3);
+  const raw = new Float32Array(n + fade);
+  let brown = 0;
+  for (let i = 0; i < raw.length; i++) {
+    brown = (brown + 0.02 * (rnd() * 2 - 1)) / 1.02;
+    raw[i] = brown;
+  }
+  const bed = raw.subarray(0, n);
   for (let i = 0; i < fade; i++) {
     const t = i / fade;
-    d[i] = d[i] * t + d[d.length - fade + i] * (1 - t);
+    bed[i] = raw[i] * t + raw[n + i] * (1 - t);
   }
-  return buf;
+  lowpassLoop(bed, 170, sr);
+  lowpassLoop(bed, 170, sr);
+  let bedPeak = 0;
+  for (let i = 0; i < n; i++) bedPeak = Math.max(bedPeak, Math.abs(bed[i]));
+  for (let i = 0; i < n; i++) out[i] += bed[i] / bedPeak * 0.3 * turning(i);
+  const knocks = Math.floor(ROLL_SECONDS * 130);
+  const grit = new Float32Array(n);
+  for (let k = 0; k < knocks; k++) {
+    let at = 0;
+    for (let tries = 0; tries < 8; tries++) {
+      at = Math.floor(rnd() * n);
+      if (rnd() < turning(at)) break;
+    }
+    const big = rnd() < 0.12;
+    const hz = big ? 85 + rnd() * 95 : 190 * Math.pow(5, Math.pow(rnd(), 1.3));
+    const ring = (big ? 0.05 + rnd() * 0.05 : 0.012 + rnd() * 0.03) * sr;
+    const amp = (big ? 0.4 : 0.34) * (0.25 + 0.75 * rnd() * rnd()) * (0.5 + 0.5 * turning(at));
+    const len = Math.floor(ring * 5), ph0 = rnd() * 6.283, w = 2 * Math.PI * hz / sr;
+    const drop = 1 - rnd() * 0.12;
+    for (let j = 0; j < len; j++) {
+      const env = Math.exp(-j / ring) * Math.min(1, j / (sr * 12e-4));
+      out[(at + j) % n] += Math.sin(ph0 + w * j * (1 - (1 - drop) * (j / len))) * env * amp;
+    }
+    const gl = Math.floor(sr * (4e-3 + rnd() * 9e-3));
+    for (let j = 0; j < gl; j++) grit[(at + j) % n] += (rnd() * 2 - 1) * (1 - j / gl) * amp;
+  }
+  lowpassLoop(grit, 2400, sr);
+  lowpassLoop(grit, 2400, sr);
+  const low = Float32Array.from(grit);
+  lowpassLoop(low, 500, sr);
+  for (let i = 0; i < n; i++) out[i] += (grit[i] - low[i]) * 2.4;
+  const d = Math.round(sr / 124);
+  const wet = new Float32Array(n);
+  let damp = 0;
+  for (let pass = 0; pass < 2; pass++) for (let i = 0; i < n; i++) {
+    damp += (wet[(i - d + n) % n] - damp) * 0.5;
+    wet[i] = out[i] + damp * 0.42;
+  }
+  for (let i = 0; i < n; i++) out[i] = out[i] * 0.6 + wet[i] * 0.4;
+  let peak = 0;
+  for (let i = 0; i < n; i++) {
+    out[i] = Math.tanh(out[i] * 1.6);
+    peak = Math.max(peak, Math.abs(out[i]));
+  }
+  for (let i = 0; i < n; i++) out[i] *= 0.9 / peak;
+  return out;
 }
-
-// A short, dark room so the sounds sit in a space rather than in the speaker.
-function roomImpulse(ctx: AudioContext) {
-  const len = Math.floor(ctx.sampleRate * 0.9);
-  const buf = ctx.createBuffer(2, len, ctx.sampleRate);
-  for (let ch = 0; ch < 2; ch++) {
-    const d = buf.getChannelData(ch);
-    let lp = 0;
-    for (let i = 0; i < len; i++) {
-      const t = i / len;
-      lp += (Math.random() * 2 - 1 - lp) * 0.18;
-      d[i] = lp * Math.pow(1 - t, 3.2);
+// A strike: hammer on a steel chisel. A handful of partials that don't line
+// up (so it rings like metal, not like a bell or a drum), a hard tick at the
+// front, the stone's brief knock under it, and a few crumbs after.
+export function renderTing(sr: number, seed: number): Float32Array {
+  const n = Math.floor(sr * 0.6);
+  const rnd = rng(seed * 977 + 31);
+  const out = new Float32Array(n);
+  const f0 = 2250 + rnd() * 500;
+  const partials: [number, number, number][] = [ // ratio, level, ring (s)
+    [1, 1, 0.13],
+    [1.47, 0.5, 0.1],
+    [2.09, 0.62, 0.075],
+    [2.76, 0.34, 0.055],
+    [3.51, 0.2, 0.04],
+    [4.3, 0.1, 0.028]
+  ];
+  for (const [ratio, amp, ring] of partials) {
+    const hz = f0 * ratio * (0.985 + rnd() * 0.03);
+    if (hz > sr * 0.45) continue;
+    const a = amp * (0.75 + rnd() * 0.5), tau = ring * sr * (0.85 + rnd() * 0.3), ph = rnd() * 6.283;
+    for (let i = 0; i < n; i++) {
+      const env = Math.exp(-i / tau);
+      out[i] += (Math.sin(ph + 2 * Math.PI * hz * i / sr) + 0.45 * Math.sin(2 * Math.PI * hz * 1.004 * i / sr)) * env * a;
     }
   }
-  return buf;
+  let prev = 0;
+  const click = Math.floor(sr * 2e-3);
+  for (let i = 0; i < click; i++) {
+    const w = rnd() * 2 - 1;
+    out[i] += (w - prev) * (1 - i / click) * 0.9;
+    prev = w;
+  }
+  const tick = 300 + rnd() * 80;
+  for (let i = 0; i < sr * 0.05; i++) out[i] += Math.sin(2 * Math.PI * tick * i / sr) * Math.exp(-i / (sr * 9e-3)) * 0.22;
+  for (let k = 0; k < 3; k++) {
+    const at = Math.floor(sr * (0.04 + rnd() * 0.16)), hz = 900 + rnd() * 1800, a = 0.03 + rnd() * 0.03;
+    for (let j = 0; j < sr * 0.012 && at + j < n; j++) out[at + j] += Math.sin(2 * Math.PI * hz * j / sr) * Math.exp(-j / (sr * 3e-3)) * a;
+  }
+  let peak = 0;
+  for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(out[i]));
+  const tail = Math.floor(sr * 0.05);
+  for (let i = 0; i < n; i++) out[i] *= 0.9 / peak * Math.min(1, (n - i) / tail);
+  return out;
 }
+
+
+const TINGS = 6; // a few different strikes, so no two in a row are the same
 
 export function createStoneAudio(): StoneAudio {
   let ctx: AudioContext | null = null;
   let master: GainNode | null = null;
-  let grind: GainNode | null = null;
-  let grit: GainNode | null = null;
-  let tone: BiquadFilterNode | null = null;
-  let roomIn: ConvolverNode | null = null;
+  let rollGain: GainNode | null = null;
+  let roll: AudioBufferSourceNode | null = null;
+  let tings: AudioBuffer[] = [];
+  let lastTing = -1;
   let muted = false;
   let pendingStrike = 0;
   let dead = false;
 
+  function toBuffer(data: Float32Array) {
+    const buf = ctx!.createBuffer(1, data.length, ctx!.sampleRate);
+    buf.getChannelData(0).set(data);
+    return buf;
+  }
   function build() {
     const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AC) return;
     ctx = new AC();
     master = ctx.createGain();
-    master.gain.value = muted ? 0 : 0.9;
+    master.gain.value = muted ? 0 : 1;
     const limiter = ctx.createDynamicsCompressor();
-    limiter.threshold.value = -14; limiter.ratio.value = 6; limiter.attack.value = 0.004; limiter.release.value = 0.2;
+    limiter.threshold.value = -10; limiter.ratio.value = 4; limiter.attack.value = 0.003; limiter.release.value = 0.15;
     master.connect(limiter).connect(ctx.destination);
-
-    const room = ctx.createConvolver();
-    room.buffer = roomImpulse(ctx);
-    roomIn = room;
-    const wet = ctx.createGain();
-    wet.gain.value = 0.22;
-    room.connect(wet).connect(master);
-
-    // ---- the grind: brown noise through a low, soft filter
-    const brown = ctx.createBufferSource();
-    brown.buffer = noiseBuffer(ctx, 5, true);
-    brown.loop = true;
-    tone = ctx.createBiquadFilter();
-    tone.type = "lowpass"; tone.frequency.value = 260; tone.Q.value = 0.6;
-    const body = ctx.createBiquadFilter();
-    body.type = "peaking"; body.frequency.value = 110; body.Q.value = 0.9; body.gain.value = 7;
-    grind = ctx.createGain();
-    grind.gain.value = 0;
-    brown.connect(tone).connect(body).connect(grind);
-    grind.connect(master); grind.connect(room);
-
-    // ---- grit: a quieter gravelly layer whose loudness wanders on its own,
-    // so the grind crumbles instead of hissing
-    const white = ctx.createBufferSource();
-    white.buffer = noiseBuffer(ctx, 3, false);
-    white.loop = true;
-    const gritBand = ctx.createBiquadFilter();
-    gritBand.type = "bandpass"; gritBand.frequency.value = 620; gritBand.Q.value = 0.8;
-    const crumble = ctx.createGain();
-    crumble.gain.value = 0;
-    const wander = ctx.createBufferSource();
-    wander.buffer = noiseBuffer(ctx, 4, false);
-    wander.loop = true; wander.playbackRate.value = 0.9;
-    const wanderLp = ctx.createBiquadFilter();
-    wanderLp.type = "lowpass"; wanderLp.frequency.value = 14;
-    const wanderAmt = ctx.createGain();
-    wanderAmt.gain.value = 9;
-    wander.connect(wanderLp).connect(wanderAmt).connect(crumble.gain);
-    grit = ctx.createGain();
-    grit.gain.value = 0;
-    white.connect(gritBand).connect(crumble).connect(grit);
-    grit.connect(master); grit.connect(room);
-
-    brown.start(); white.start(); wander.start();
+    roll = ctx.createBufferSource();
+    roll.buffer = toBuffer(renderRoll(ctx.sampleRate));
+    roll.loop = true;
+    rollGain = ctx.createGain();
+    rollGain.gain.value = 0;
+    roll.connect(rollGain).connect(master);
+    roll.start(0, Math.random() * ROLL_SECONDS);
+    for (let i = 0; i < TINGS; i++) tings.push(toBuffer(renderTing(ctx.sampleRate, i + 1)));
   }
-
-  function playStrike(strength: number) {
-    if (!ctx || !master || ctx.state !== "running") return;
-    const t = ctx.currentTime + 0.005;
-    const k = 0.9 + Math.random() * 0.2;
-    const out = ctx.createGain();
-    out.gain.value = 0.55 * strength;
-    out.connect(master);
-    if (roomIn) { const send = ctx.createGain(); send.gain.value = 0.6; out.connect(send).connect(roomIn); }
-
-    // the knock: a damped low thud
-    const thud = ctx.createOscillator();
-    thud.type = "sine";
-    thud.frequency.setValueAtTime(190 * k, t);
-    thud.frequency.exponentialRampToValueAtTime(82 * k, t + 0.09);
-    const thudG = ctx.createGain();
-    thudG.gain.setValueAtTime(0.0001, t);
-    thudG.gain.exponentialRampToValueAtTime(0.9, t + 0.004);
-    thudG.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
-    thud.connect(thudG).connect(out);
-    thud.start(t); thud.stop(t + 0.2);
-
-    // the stone answering: two short, woody partials
-    for (const [f, g, dur] of [[540, 0.22, 0.07], [910, 0.10, 0.045]] as const) {
-      const osc = ctx.createOscillator();
-      osc.type = "triangle";
-      osc.frequency.value = f * k * (0.97 + Math.random() * 0.06);
-      const og = ctx.createGain();
-      og.gain.setValueAtTime(0.0001, t);
-      og.gain.exponentialRampToValueAtTime(g, t + 0.002);
-      og.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-      osc.connect(og).connect(out);
-      osc.start(t); osc.stop(t + dur + 0.02);
-    }
-
-    // the chip: a breath of filtered noise, then crumbs
-    const chip = ctx.createBufferSource();
-    chip.buffer = noiseBuffer(ctx, 0.3, false);
-    const chipF = ctx.createBiquadFilter();
-    chipF.type = "bandpass"; chipF.frequency.value = 1500 * k; chipF.Q.value = 0.9;
-    const chipG = ctx.createGain();
-    chipG.gain.setValueAtTime(0.0001, t);
-    chipG.gain.exponentialRampToValueAtTime(0.16, t + 0.003);
-    chipG.gain.exponentialRampToValueAtTime(0.02, t + 0.04);
-    chipG.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
-    chip.connect(chipF).connect(chipG).connect(out);
-    chip.start(t); chip.stop(t + 0.3);
+  function playTing(strength: number) {
+    if (!ctx || !master || ctx.state !== "running" || !tings.length) return;
+    let pick = Math.floor(Math.random() * tings.length);
+    if (pick === lastTing) pick = (pick + 1) % tings.length;
+    lastTing = pick;
+    const src = ctx.createBufferSource();
+    src.buffer = tings[pick];
+    src.playbackRate.value = 0.97 + Math.random() * 0.06;
+    const g = ctx.createGain();
+    g.gain.value = 0.34 * strength;
+    src.connect(g).connect(master);
+    src.start();
   }
 
   return {
     unlock() {
       if (dead) return;
       if (!ctx) build();
-      if (!ctx) return;
-      if (ctx.state !== "running") {
+      if (ctx && ctx.state !== "running") {
         void ctx.resume().then(() => {
-          if (pendingStrike > 0) { const s = pendingStrike; pendingStrike = 0; playStrike(s); }
+          if (pendingStrike > 0) { const s = pendingStrike; pendingStrike = 0; playTing(s); }
         });
       }
     },
-    setMotion(amount, carving) {
-      if (!ctx || !grind || !grit || !tone) return;
-      const t = ctx.currentTime;
-      const a = Math.min(1, Math.max(0, amount));
-      // fast to rise, slow to fall: the ground takes a moment to come to rest
-      const tc = a > 0.02 ? 0.07 : 0.22;
-      grind.gain.setTargetAtTime(a * (carving ? 0.62 : 0.42), t, tc);
-      grit.gain.setTargetAtTime(a * a * (carving ? 0.10 : 0.045), t, tc);
-      tone.frequency.setTargetAtTime(200 + a * (carving ? 330 : 190), t, 0.12);
+    setMotion(amount) {
+      if (!ctx || !rollGain || !roll) return;
+      const t = ctx.currentTime, a = Math.min(1, Math.max(0, amount));
+      // quick to start, a little slower to come to rest; faster hands roll faster
+      rollGain.gain.setTargetAtTime(a * 0.8, t, a > 0.02 ? 0.06 : 0.16);
+      roll.playbackRate.setTargetAtTime(0.86 + a * 0.3, t, 0.25);
     },
     strike(strength = 1) {
       if (!ctx || ctx.state !== "running") { pendingStrike = strength; return; }
-      playStrike(strength);
+      playTing(strength);
     },
     setMuted(m) {
       muted = m;
-      if (ctx && master) master.gain.setTargetAtTime(m ? 0 : 0.9, ctx.currentTime, 0.03);
+      if (ctx && master) master.gain.setTargetAtTime(m ? 0 : 1, ctx.currentTime, 0.03);
     },
     destroy() {
       dead = true;
       if (ctx) void ctx.close();
-      ctx = null;
+      ctx = null; tings = [];
     },
   };
 }
