@@ -1,29 +1,7 @@
-import { About } from "@/components/landing/About";
-import { Faq } from "@/components/landing/Faq";
-import { Footer } from "@/components/landing/Footer";
-import { Hero } from "@/components/landing/Hero";
-import { Highlight } from "@/components/landing/Highlight";
-import { Navbar } from "@/components/landing/Navbar";
-import { Pricing } from "@/components/landing/Pricing";
-import { Services } from "@/components/landing/Services";
-import { Testimonials } from "@/components/landing/Testimonials";
-import { Reveals } from "@/components/Reveals";
+import { ComingSoon } from "@/components/stone/ComingSoon";
 
+// Coming soon. The full landing page's sections are still in
+// src/components/landing, ready for when the site goes live.
 export default function Home() {
-  return (
-    <>
-      <Hero />
-      <Navbar />
-      <main className="mt-[calc(var(--hero-h)/2-var(--nav-h)/2)]">
-        <About />
-        <Highlight />
-        <Services />
-        <Pricing />
-        <Testimonials />
-        <Faq />
-      </main>
-      <Footer />
-      <Reveals />
-    </>
-  );
+  return <ComingSoon />;
 }

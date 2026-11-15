@@ -64,6 +64,27 @@ body { font-family: var(--font-sans), system-ui, sans-serif; }
 }
 [data-reveal="words"][data-shown] .reveal-word > span { translate: none; }
 
+/* ---------------------------------------------------------------
+   Coming soon: the carvable stone (src/components/stone).
+   engine.ts sets data-live once the stone is drawing, data-hint="on"
+   while the "click to carve" pill shows, data-armed after the first cut.
+---------------------------------------------------------------- */
+.stone-canvas { opacity: 0; transition: opacity .6s ease; }
+.stone[data-live] .stone-canvas { opacity: 1; }
+
+/* the pill rests under the copy until the pointer is known, then rides with it */
+.stone-hint {
+  left: 50%; top: 86%; translate: -50% -50%;
+  opacity: 0; scale: .92; transform-origin: 0 0;
+  box-shadow: 0 6px 18px rgb(8 28 30 / .28), 0 1px 2px rgb(8 28 30 / .25);
+  transition: opacity .35s ease, scale .45s cubic-bezier(.22, 1, .36, 1);
+}
+.stone-hint:not([data-follow]) { transform-origin: 50% 50%; }
+.stone[data-hint="on"] .stone-hint { opacity: 1; scale: 1; }
+
+.stone-sound .stone-sound-off, .stone-sound[data-muted="true"] .stone-sound-on { display: none; }
+.stone-sound[data-muted="true"] .stone-sound-off { display: inline; }
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after { transition-duration: 1ms !important; animation: none !important; }
