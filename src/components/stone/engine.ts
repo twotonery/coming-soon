@@ -1,17 +1,19 @@
 // The stone slab: a relief the browser lights in real time, so the wordmark
-// and everything the visitor does to the stone sit in one surface under one lamp.
+// and everything the visitor cuts sit in one surface under one sun.
 //
-// The stone is andesite / lava stone in dark mode and limestone in light mode,
-// lit by a low golden-hour sun that pools over the middle of the slab.
+// The stone is limestone in evening sun, with a palm's shadow swaying over one
+// corner, a little moss and wild grass, and a few small cracks.
 //
-// After the first click the hand "bends" the stone: it parts under the cursor
-// and closes again behind it, throwing chips and dust ahead. A click sets whatever is
-// open at that moment as a cut; holding and dragging cuts a full groove. Cuts
-// have the logo's own stroke width, depth and edge, and last until reload.
+// Nothing answers the cursor until the first click. From then on, wherever the
+// cursor goes it carves, at the logo's own stroke width, depth and edge, and
+// throws chips and dust ahead. Cuts last until the page is reloaded.
 //
-// It keeps a "carve map" the size of the slab (see BRUSH_FRAG): r = cuts,
-// g = stone held open, which closes. The slab drifts sideways as an endless
-// band, and the carve map wraps with it.
+// It keeps a "carve map" the size of the slab (see BRUSH_FRAG). The slab drifts
+// sideways as an endless band, and the carve map, cracks, moss and grass all
+// wrap with it.
+//
+// data-look="before" on the root shows the earlier lighting (a round pool of
+// sun, no plants or cracks), kept for comparing the two.
 //
 // Framework-free on purpose: mountStone() is handed a root element holding
 //   canvas[data-stone-canvas], [data-stone-hint], button[data-stone-sound]
@@ -19,7 +21,7 @@
 
 import { createStoneAudio } from "./audio";
 import { ICON_BOX, ICON_PATHS, WORD_BOX, WORD_PATHS } from "./logo";
-import { BLUR_FRAG, BRUSH_FRAG, BRUSH_VERT, DECAY_FRAG, GRIT_FRAG, GRIT_VERT, PACK_FRAG, QUAD_VERT, STONE_FRAG } from "./shaders";
+import { BLUR_FRAG, BRUSH_FRAG, BRUSH_VERT, GRIT_FRAG, GRIT_VERT, PACK_FRAG, QUAD_VERT, STONE_FRAG } from "./shaders";
 
 export type StoneHandle = { destroy(): void };
 export type StoneOptions = {
@@ -37,17 +39,15 @@ const BAND_CENTRE = 0.437; // of the viewport height
 const DRIFT_SECONDS = 95; // time for one tile to pass
 const STEM_UNITS = 3.4;   // the wordmark's stroke width: every cut is this wide
 const EDGE_SIGMA = 2.9;   // px over which a cut's edge can wander and chip (at scale 1)
-const CLOSE_SECONDS = 0.9; // how long parted stone takes to close again
-const CLOSE_RATE = 0.5 / CLOSE_SECONDS; // in cone units: 1 at the centre line, 0.5 at the edge
 
 const HINT_DELAY = 500;
 const MAX_CHIPS = 640;
 const CHIP = 12; // floats per piece: x, y, vx, vy, size, life, span, drag, turn, spin, id, kind (0 stone, 1 powder)
-const NONE = 9;  // "don't draw this channel"
 
-// A stroke for the carve map. keep / open are how much is taken off the cone
-// at each end (0 = full width, 0.5 = nothing left), or NONE.
-type Op = { ax: number; ay: number; bx: number; by: number; keep: [number, number]; open: [number, number] };
+// A stretch of the cursor's path, to be cut into the carve map.
+type Op = { ax: number; ay: number; bx: number; by: number };
+type Blade = { dx: number; h: number; lean: number; w: number; tone: number; phase: number; seeds: boolean };
+type Tuft = { x: number; y: number; blades: Blade[] };
 
 function mulberry(seed: number) {
   return () => {
@@ -153,10 +153,14 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
 
   const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const coarse = window.matchMedia("(pointer: coarse)").matches;
-  const lightScheme = window.matchMedia("(prefers-color-scheme: light)");
   const audio = createStoneAudio(options.rollUrl);
-  // Limestone in light mode, andesite in dark. data-theme on the root overrides the system setting.
-  const isLight = () => (root.dataset.theme ? root.dataset.theme === "light" : lightScheme.matches);
+  const before = () => root.dataset.look === "before";
+  // grass is drawn on its own canvas, over the stone and under the page's text
+  const plants = document.createElement("canvas");
+  plants.setAttribute("aria-hidden", "true");
+  plants.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none";
+  canvas.after(plants);
+  const pg = plants.getContext("2d");
 
   // ------------------------------------------------------------ GL plumbing
   function program(vs: string, fs: string) {
@@ -204,9 +208,11 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
   }
 
   type Prog = ReturnType<typeof program>;
-  let pStone: Prog, pBlur: Prog, pPack: Prog, pBrush: Prog, pDecay: Prog, pGrit: Prog;
+  let pStone: Prog, pBlur: Prog, pPack: Prog, pBrush: Prog, pGrit: Prog;
   let quad: WebGLVertexArrayObject, gritVao: WebGLVertexArrayObject, gritBuf: WebGLBuffer;
-  let noiseTex: WebGLTexture, rockTex: WebGLTexture;
+  let noiseTex: WebGLTexture, rockTex: WebGLTexture, leafTex: WebGLTexture;
+  let decorTex: WebGLTexture | null = null;
+  let tufts: Tuft[] = [];
   let wordTex: WebGLTexture | null = null;
   let carveTex: WebGLTexture | null = null, carveFbo: WebGLFramebuffer | null = null;
 
@@ -215,7 +221,6 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     pBlur = program(QUAD_VERT, BLUR_FRAG);
     pPack = program(QUAD_VERT, PACK_FRAG);
     pBrush = program(BRUSH_VERT, BRUSH_FRAG);
-    pDecay = program(QUAD_VERT, DECAY_FRAG);
     pGrit = program(GRIT_VERT, GRIT_FRAG);
 
     quad = gl.createVertexArray()!;
@@ -238,6 +243,7 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
 
     noiseTex = texture(512, 512, true, stoneNoise(512), true);
     rockTex = texture(512, 512, true, rockNoise(512), true);
+    buildLeaf();
   }
 
   // ------------------------------------------------------------ layout
@@ -254,6 +260,8 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     L.dpr = dpr;
     canvas!.width = Math.round(w * dpr);
     canvas!.height = Math.round(h * dpr);
+    plants.width = Math.round(w * dpr);
+    plants.height = Math.round(h * dpr);
     L.unit = Math.max(w / TILE_UNITS, h / 135);
     L.tile = TILE_UNITS * L.unit;
     L.scale = Math.min(1.25, Math.max(0.6, L.unit / 8.2));
@@ -263,7 +271,8 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     L.period = L.tile * Math.max(1, Math.ceil((w + L.tile * 0.5) / L.tile));
     buildWord();
     buildCarve();
-    ops.length = 0; trail.length = 0;
+    buildDecor();
+    ops.length = 0;
   }
 
   // The band, cut from the logo's vector: one tile of "twotonery <mark>".
@@ -340,12 +349,6 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
 
   // ------------------------------------------------------------ carving
   const ops: Op[] = [];
-  // where the hand has lately held the stone open, so a click can set it
-  const trail: { x: number; y: number; t: number; gap: boolean }[] = [];
-  let closeCarry = 0, closeUntil = 0;
-  // The engine's own clock, advanced once a frame: the map closes by it and the
-  // trail is timed by it, so the two can't drift apart when frames run long.
-  let clock = 0;
 
   function flushOps() {
     if (!ops.length || !carveFbo) return;
@@ -364,8 +367,6 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
       // spills over either edge so the band stays seamless
       const base = Math.floor(Math.min(op.ax, op.bx) / L.period) * L.period;
       const ax = op.ax - base, bx = op.bx - base;
-      gl.uniform2f(pBrush.u.u_keep, ...op.keep);
-      gl.uniform2f(pBrush.u.u_open, ...op.open);
       for (const shift of [0, -L.period, L.period]) {
         const x0 = Math.min(ax, bx) - reach + shift, x1 = Math.max(ax, bx) + reach + shift;
         if (x1 < 0 || x0 > L.period) continue;
@@ -380,47 +381,161 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     gl.blendEquation(gl.FUNC_ADD);
   }
 
-  // Parted stone closes: the open cones shrink, so each gap narrows to nothing.
-  function closeUp(dt: number, now: number) {
-    if (now > closeUntil || !carveFbo) return;
-    closeCarry += dt * CLOSE_RATE * 255;
-    const step = Math.floor(closeCarry);
-    if (step < 1) return;
-    closeCarry -= step;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, carveFbo);
-    gl.viewport(0, 0, Math.round(L.period * L.carveScale), Math.round(L.h * L.carveScale));
-    gl.enable(gl.BLEND);
-    gl.blendEquation(gl.FUNC_REVERSE_SUBTRACT);
-    gl.blendFunc(gl.ONE, gl.ONE);
-    gl.useProgram(pDecay.p);
-    gl.uniform1f(pDecay.u.u_amount, step / 255);
-    gl.bindVertexArray(quad);
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    gl.disable(gl.BLEND);
-    gl.blendEquation(gl.FUNC_ADD);
-  }
-
-  // Hold the stone open from the last trail point to (x, y).
-  function part(x: number, y: number, now: number, gap: boolean) {
-    const last = trail[trail.length - 1];
-    if (last && !gap && Math.hypot(x - last.x, y - last.y) < 1) { last.t = now; ops.push({ ax: x, ay: y, bx: x, by: y, keep: [NONE, NONE], open: [0, 0] }); }
-    else {
-      const from = last && !gap ? last : { x, y };
-      ops.push({ ax: from.x, ay: from.y, bx: x, by: y, keep: [NONE, NONE], open: [0, 0] });
-      trail.push({ x, y, t: now, gap });
+  // ------------------------------------------------------------ leaves, moss, cracks, grass
+  // The shadow of one palm frond, drawn once: white leaf on black, its stem at
+  // the middle of the left edge, reaching right. The shader lays it over the
+  // slab (softened, since the palm is some way off) and sways it.
+  function buildLeaf() {
+    const S = 1024, c = document.createElement("canvas");
+    c.width = c.height = S;
+    const g = c.getContext("2d")!;
+    g.fillStyle = "#000"; g.fillRect(0, 0, S, S);
+    g.fillStyle = "#fff"; g.strokeStyle = "#fff";
+    const rnd = mulberry(9102);
+    const x0 = 0.04 * S, len = 0.92 * S, mid = S / 2;
+    const rib = (t: number) => [x0 + len * t, mid + len * 0.10 * t * t] as const; // it sags toward the tip
+    g.lineWidth = S * 0.006;
+    g.beginPath();
+    for (let t = 0; t <= 1.001; t += 0.02) g.lineTo(...rib(t));
+    g.stroke();
+    const N = 46;
+    for (let i = 0; i < N; i++) {
+      const t = 0.06 + (0.92 * i) / (N - 1);
+      const [bx, by] = rib(t);
+      // leaflets are short near the stem and at the tip, and sweep forward
+      const reach = len * 0.30 * Math.pow(Math.sin(Math.PI * Math.min(1, t * 1.08)), 0.6) * (0.85 + rnd() * 0.3);
+      for (const side of [-1, 1]) {
+        if (rnd() < 0.06) continue; // one missing here and there
+        const ang = side * (1.15 - 0.55 * t + (rnd() - 0.5) * 0.16);
+        const droop = reach * (0.18 + rnd() * 0.2);
+        const ex = bx + Math.cos(ang) * reach, ey = by + Math.sin(ang) * reach + droop * (side > 0 ? 0.5 : 0.15);
+        const nx = -Math.sin(ang), ny = Math.cos(ang), wd = len * 0.011 * (0.8 + rnd() * 0.5);
+        const mx = (bx + ex) / 2, my = (by + ey) / 2 + droop * 0.15;
+        g.beginPath();
+        g.moveTo(bx, by);
+        g.quadraticCurveTo(mx + nx * wd, my + ny * wd, ex, ey);
+        g.quadraticCurveTo(mx - nx * wd, my - ny * wd, bx, by);
+        g.fill();
+      }
     }
-    while (trail.length > 2 && now - trail[0].t > CLOSE_SECONDS) trail.shift();
-    closeUntil = now + CLOSE_SECONDS * 2.5;
+    leafTex = texture(S, S, false, c, true);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   }
 
-  // A strike: whatever the hand is holding open right now becomes a cut,
-  // tapering exactly as far as the stone had already closed.
-  function setOpenStone(now: number) {
-    for (let i = 0; i < trail.length; i++) {
-      const b = trail[i], a = i > 0 && !b.gap ? trail[i - 1] : b;
-      const da = (now - a.t) * CLOSE_RATE, db = (now - b.t) * CLOSE_RATE;
-      if (da >= 0.5 && db >= 0.5) continue;
-      ops.push({ ax: a.x, ay: a.y, bx: b.x, by: b.y, keep: [Math.min(da, NONE), Math.min(db, NONE)], open: [NONE, NONE] });
+  // What grows on the slab and where it has cracked, laid out once per size
+  // and painted into a texture the stone shader reads: r = cracks, g = moss.
+  // Kept to the slab's edges, clear of the wordmark and the copy, and sparse.
+  function buildDecor() {
+    const rnd = mulberry(7700 + Math.round(L.period));
+    const k = Math.min(1, 2048 / L.period), big = Math.max(0.75, L.scale);
+    const c = document.createElement("canvas");
+    c.width = Math.max(2, Math.round(L.period * k)); c.height = Math.max(2, Math.round(L.h * k));
+    const g = c.getContext("2d")!;
+    g.fillStyle = "#000"; g.fillRect(0, 0, c.width, c.height);
+    g.globalCompositeOperation = "lighter";
+    g.scale(k, k);
+    g.lineCap = "round";
+    const wrapped = (draw: () => void) => { for (const dx of [0, -L.period, L.period]) { g.save(); g.translate(dx, 0); draw(); g.restore(); } };
+    const moss = (x: number, y: number, r: number, a: number) => wrapped(() => {
+      const grad = g.createRadialGradient(x, y, 0, x, y, r);
+      grad.addColorStop(0, `rgba(0,255,0,${a})`); grad.addColorStop(1, "rgba(0,255,0,0)");
+      g.fillStyle = grad; g.beginPath(); g.arc(x, y, r, 0, 6.3); g.fill();
+    });
+    const clump = (x: number, y: number, n: number, sx: number, sy: number) => {
+      for (let i = 0; i < n; i++) moss(x + (rnd() + rnd() + rnd() - 1.5) * sx, y + (rnd() + rnd() - 1) * sy, (6 + rnd() * 12) * big, 0.3 + rnd() * 0.3);
+    };
+    const tuft = (x: number, y: number, tall: number, n: number) => {
+      const blades: Blade[] = [];
+      for (let i = 0; i < n; i++) blades.push({
+        dx: (rnd() + rnd() - 1) * 9 * big, h: tall * (0.45 + 0.55 * rnd()), lean: (rnd() + rnd() - 1) * 0.55,
+        w: (1.7 + rnd() * 1.7) * big, tone: rnd(), phase: rnd() * 6.3, seeds: rnd() < 0.22,
+      });
+      tufts.push({ x, y, blades });
+      clump(x, y, 5, 10 * big, 4 * big); // grass grows out of a little moss
+    };
+    // a crack: a wandering line that thins as it goes, now and then forking
+    const crack = (x: number, y: number, ang: number, length: number, width: number, onPoint?: (x: number, y: number, t: number) => void) => {
+      const steps = Math.max(2, Math.round(length / 5));
+      for (let i = 0; i < steps; i++) {
+        const t = i / steps;
+        ang += (rnd() - 0.5) * 0.4;
+        if (rnd() < 0.08) ang += (rnd() - 0.5) * 1.3; // a kink
+        const nx = x + Math.cos(ang) * 5, ny = y + Math.sin(ang) * 5;
+        const x0 = x, y0 = y;
+        const wd = Math.max(0.7, width * (1 - 0.75 * t));
+        wrapped(() => {
+          // a faint wide stroke under a fine one, so the line has a soft edge
+          for (const [mul, a] of [[2.6, 0.22], [1, 0.75]] as const) {
+            g.strokeStyle = `rgba(255,0,0,${a})`; g.lineWidth = wd * mul; g.beginPath(); g.moveTo(x0, y0); g.lineTo(nx, ny); g.stroke();
+          }
+        });
+        if (length > 40 && rnd() < 0.05) crack(nx, ny, ang + (rnd() < 0.5 ? -1 : 1) * (0.5 + rnd() * 0.5), length * (1 - t) * 0.5, width * (1 - 0.6 * t) * 0.7);
+        onPoint?.(nx, ny, t);
+        x = nx; y = ny;
+      }
+    };
+
+    tufts = [];
+    const grassTall = Math.min(46 * big, L.h * 0.056);
+    const n = Math.max(2, Math.round(L.period / 950));
+    for (let i = 0; i < n; i++) {
+      // one crack down from the top edge, with moss along its upper part and a tuft on a ledge
+      const tx = ((i + 0.15 + rnd() * 0.5) / n) * L.period;
+      let ledge = 0.25 + rnd() * 0.3, grown = false;
+      crack(tx, -2, Math.PI / 2 + (rnd() - 0.5) * 0.7, L.h * (0.12 + rnd() * 0.12), 1.5 * big, (x, y, t) => {
+        if (t < 0.6 && rnd() < 0.5) moss(x + (rnd() - 0.5) * 8, y + (rnd() - 0.5) * 6, (4 + rnd() * 7) * big, 0.4);
+        if (!grown && t > ledge) { grown = true; tuft(x, y, grassTall * 0.7, 6 + Math.floor(rnd() * 4)); ledge = 2; }
+      });
+      // one shorter crack up from the bottom edge, where grass has taken hold
+      const bx = ((i + 0.6 + rnd() * 0.35) / n) * L.period;
+      crack(bx, L.h + 2, -Math.PI / 2 + (rnd() - 0.5) * 0.8, L.h * (0.05 + rnd() * 0.05), 1.4 * big);
+      tuft(bx + (rnd() - 0.5) * 14, L.h + 2, grassTall, 9 + Math.floor(rnd() * 6));
+      // moss creeping in over the top edge, and a smaller patch at the foot
+      clump(((i + rnd()) / n) * L.period, L.h * 0.01, 18 + Math.floor(rnd() * 12), 46 * big, 12 * big);
+      clump(((i + rnd()) / n) * L.period, L.h * 0.995, 9 + Math.floor(rnd() * 6), 24 * big, 6 * big);
+    }
+    if (decorTex) gl.deleteTexture(decorTex);
+    decorTex = texture(c.width, c.height, true, c);
+  }
+
+  // Wild grass: each blade a tapered sliver that leans with the wind, drawn
+  // with its shadow on the stone behind it. Tufts ride the slab as it drifts.
+  const GREENS = ["#4f7426", "#6a8f33", "#86a544", "#3f6424", "#a4ae58"];
+  function drawPlants(t: number) {
+    if (!pg) return;
+    pg.setTransform(L.dpr, 0, 0, L.dpr, 0, 0);
+    pg.clearRect(0, 0, L.w, L.h);
+    if (before()) return;
+    for (const tf of tufts) {
+      const x = ((((tf.x - scroll) % L.period) + L.period) % L.period);
+      for (const sx of [x, x - L.period]) {
+        if (sx < -80 || sx > L.w + 80) continue;
+        const gust = still ? 0 : Math.sin(t * 1.25 + tf.x * 0.013) * 0.55 + Math.sin(t * 0.47 + tf.x * 0.004) * 0.45;
+        for (const pass of [0, 1]) for (const b of tf.blades) {
+          const bend = b.lean + (still ? 0 : (gust + Math.sin(t * 2.3 + b.phase) * 0.25) * 0.16 * (b.h / 30 + 0.4));
+          const up = b.h * Math.sqrt(1 - Math.min(0.8, bend * bend));
+          const ox = pass ? 0 : 3.5, oy = pass ? 0 : 2.5; // the shadow falls down and to the right
+          const bx = sx + b.dx + ox, by = tf.y + oy, tx = bx + bend * b.h, ty = by - up, cx = bx + bend * b.h * 0.22, cy = by - up * 0.6;
+          pg.fillStyle = pass ? GREENS[Math.floor(b.tone * GREENS.length)] : "rgba(70,48,18,0.20)";
+          pg.beginPath();
+          pg.moveTo(bx - b.w / 2, by);
+          pg.quadraticCurveTo(cx - b.w * 0.35, cy, tx, ty);
+          pg.quadraticCurveTo(cx + b.w * 0.35, cy, bx + b.w / 2, by);
+          pg.fill();
+          if (pass && b.seeds) {
+            // a seed head: a few grains up the last third of the blade
+            pg.fillStyle = "#b8ab68";
+            for (let i = 0; i < 5; i++) {
+              const u = 0.68 + i * 0.07, v = 1 - u;
+              const px = v * v * bx + 2 * v * u * cx + u * u * tx, py = v * v * by + 2 * v * u * cy + u * u * ty;
+              pg.beginPath();
+              pg.ellipse(px + (i % 2 ? 1.3 : -1.3), py, 1.5, 0.9, bend + (i % 2 ? 0.6 : -0.6), 0, 6.3);
+              pg.fill();
+            }
+          }
+        }
+      }
     }
   }
 
@@ -496,7 +611,6 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, chipOut, 0, n * 7);
     gl.uniform2f(pGrit.u.u_res, L.w, L.h);
     gl.uniform1f(pGrit.u.u_dpr, L.dpr);
-    gl.uniform1f(pGrit.u.u_light, isLight() ? 1 : 0);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.drawArrays(gl.POINTS, 0, n);
@@ -504,7 +618,9 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
   }
 
   // ------------------------------------------------------------ the hand
-  const hand = { x: 0, y: 0, known: false, down: false, mouse: true, sx: 0, sy: 0, dirX: 1, dirY: 0, speed: 0, lastMove: 0, sinceTok: 0, fresh: true };
+  // x, y: where the pointer is on screen. sx, sy: where it last touched the
+  // stone. fresh: the next touch starts a new cut instead of joining the last.
+  const hand = { x: 0, y: 0, known: false, down: false, mouse: true, sx: 0, sy: 0, dirX: 1, dirY: 0, speed: 0, lastMove: 0, fresh: true };
   const pill = { x: 0, y: 0, placed: false };
   let armed = false; // nothing answers the hand until the first click
   const driftSpeed = () => (still ? 0 : L.tile / DRIFT_SECONDS);
@@ -523,19 +639,22 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     pill.x += (tx - pill.x) * k; pill.y += (ty - pill.y) * k;
     hint.style.translate = `${pill.x.toFixed(1)}px ${pill.y.toFixed(1)}px`;
   }
-  function arm() {
-    if (armed) return;
-    armed = true;
-    delete root.dataset.hint;
-    root.dataset.armed = "";
+  // Cut from where the hand last touched the stone to (sx, sy).
+  function cutTo(sx: number, sy: number) {
+    ops.push(hand.fresh ? { ax: sx, ay: sy, bx: sx, by: sy } : { ax: hand.sx, ay: hand.sy, bx: sx, by: sy });
+    hand.fresh = false;
   }
 
   function onMove(e: PointerEvent) {
     const [x, y] = local(e);
-    const nowMs = performance.now(), now = clock;
+    const nowMs = performance.now();
     hand.mouse = e.pointerType === "mouse";
     const sx = x + scroll, sy = y;
-    if (!hand.known) { hand.known = true; hand.fresh = true; hand.x = x; hand.y = y; hand.sx = sx; hand.sy = sy; hand.lastMove = nowMs; return; }
+    if (!hand.known) {
+      if (!hand.mouse && !hand.down) return; // a finger carves only while it is on the glass
+      hand.known = true; hand.fresh = true; hand.x = x; hand.y = y; hand.sx = sx; hand.sy = sy; hand.lastMove = nowMs;
+      return;
+    }
     const dx = sx - hand.sx, dy = sy - hand.sy, dist = Math.hypot(dx, dy);
     if (dist < 0.5) return;
     const dt = Math.max(4, nowMs - hand.lastMove) / 1000;
@@ -543,15 +662,9 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     hand.speed += (inst - hand.speed) * 0.35;
     hand.dirX += (dx / dist - hand.dirX) * 0.5; hand.dirY += (dy / dist - hand.dirY) * 0.5;
     if (armed) {
-      part(sx, sy, now, hand.fresh);
-      hand.fresh = false;
-      if (hand.down) {
-        ops.push({ ax: hand.sx, ay: hand.sy, bx: sx, by: sy, keep: [0, 0], open: [NONE, NONE] });
-        hand.sinceTok += dist;
-        if (hand.sinceTok > 110) { hand.sinceTok = 0; audio.strike(0.42 + Math.random() * 0.16); }
-      }
+      cutTo(sx, sy);
       const len = Math.hypot(hand.dirX, hand.dirY) || 1;
-      const share = (hand.down ? 0.5 : 0.32) * (0.35 + Math.min(1, inst / 900));
+      const share = 0.4 * (0.35 + Math.min(1, inst / 900));
       let count = Math.floor(dist * share);
       if (Math.random() < dist * share - count) count++;
       throwChips(x, y, hand.dirX / len, hand.dirY / len, inst, Math.min(count, 16), 0.42);
@@ -560,24 +673,27 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
   }
   function onDown(e: PointerEvent) {
     if (e.button !== 0) return;
-    if ((e.target as HTMLElement).closest("[data-stone-sound]")) return;
+    if ((e.target as HTMLElement).closest("button")) return;
     const [x, y] = local(e);
-    const now = clock;
     hand.mouse = e.pointerType === "mouse";
-    const jumped = !hand.known || !hand.mouse;
-    hand.known = true; hand.down = true; hand.x = x; hand.y = y; hand.sx = x + scroll; hand.sy = y;
-    hand.lastMove = performance.now(); hand.sinceTok = 0;
+    if (!hand.known || !hand.mouse) hand.fresh = true;
+    hand.known = true; hand.down = true; hand.x = x; hand.y = y;
+    hand.lastMove = performance.now();
     try { root.setPointerCapture(e.pointerId); } catch { /* not capturable; carving still works */ }
-    const first = !armed;
-    arm();
     audio.unlock();
-    part(hand.sx, hand.sy, now, jumped || first || hand.fresh);
-    hand.fresh = false;
-    setOpenStone(now);
-    const len = Math.hypot(hand.dirX, hand.dirY) || 1;
-    const moving = hand.speed > 60 && !first;
-    throwChips(x, y, hand.dirX / len, hand.dirY / len, moving ? Math.max(260, hand.speed) : 240, 26, moving ? 0.6 : 3.2);
-    audio.strike(1);
+    if (!armed) {
+      // the first click wakes the stone: from here on the cursor carves wherever it goes
+      armed = true;
+      hand.fresh = true;
+      delete root.dataset.hint;
+      root.dataset.armed = "";
+    }
+    if (hand.fresh) {
+      cutTo(x + scroll, y);
+      const len = Math.hypot(hand.dirX, hand.dirY) || 1;
+      throwChips(x, y, hand.dirX / len, hand.dirY / len, 220, 14, 3.2);
+    }
+    hand.sx = x + scroll; hand.sy = y;
   }
   function onUp(e: PointerEvent) {
     hand.down = false;
@@ -610,16 +726,11 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     last = now;
     layout();
     scroll += driftSpeed() * dt;
-    clock += dt;
-    // the slab keeps moving under a hand that is held still
+    // the slab keeps moving under a cursor that is held still, and it keeps cutting
     if (hand.known) {
       const sx = hand.x + scroll;
-      if (armed && (hand.mouse || hand.down)) {
-        if (hand.down) ops.push({ ax: hand.sx, ay: hand.sy, bx: sx, by: hand.y, keep: [0, 0], open: [NONE, NONE] });
-        part(sx, hand.y, clock, hand.fresh);
-        hand.fresh = false;
-      }
-      hand.sx = sx;
+      if (armed) cutTo(sx, hand.y);
+      hand.sx = sx; hand.sy = hand.y;
     }
 
     if (performance.now() - hand.lastMove > 45) hand.speed *= Math.exp(-dt / 0.09);
@@ -627,7 +738,6 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     followHint(dt);
 
     flushOps();
-    closeUp(dt, clock);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, canvas!.width, canvas!.height);
@@ -637,14 +747,13 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     bind(1, wordTex!, pStone.u.u_word);
     bind(2, carveTex!, pStone.u.u_carve);
     bind(3, rockTex, pStone.u.u_rock);
-    const light = isLight();
-    gl.uniform1f(pStone.u.u_light, light ? 1 : 0);
+    bind(4, leafTex, pStone.u.u_leaf);
+    bind(5, decorTex!, pStone.u.u_decor);
+    gl.uniform1f(pStone.u.u_look, before() ? 0 : 1);
     gl.uniform1f(pStone.u.u_sway, still ? 0 : now % 4000);
-    if (root.dataset.tone !== (light ? "light" : "dark")) root.dataset.tone = light ? "light" : "dark";
     gl.uniform2f(pStone.u.u_res, L.w, L.h);
     gl.uniform1f(pStone.u.u_dpr, L.dpr);
     gl.uniform1f(pStone.u.u_scroll, scroll);
-    gl.uniform1f(pStone.u.u_time, now % 1000);
     gl.uniform1f(pStone.u.u_tile, L.tile);
     gl.uniform2f(pStone.u.u_band, L.bandTop, L.bandH);
     gl.uniform1f(pStone.u.u_period, L.period);
@@ -653,12 +762,13 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     gl.uniform1f(pStone.u.u_edge, (2 * L.r * 0.4) / (EDGE_SIGMA * L.scale));
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     drawChips(dt);
+    drawPlants(now);
     if (!root.dataset.live) root.dataset.live = "";
   }
 
   function onLost(e: Event) { e.preventDefault(); lost = true; }
   function onRestored() {
-    wordTex = null; carveTex = null; carveFbo = null; L.w = 0;
+    wordTex = null; carveTex = null; carveFbo = null; decorTex = null; L.w = 0;
     setupStatic();
     lost = false;
   }
@@ -670,6 +780,7 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     scroll = (GAP_AFTER_ICON / 2 + WORD_BOX.w + GAP_AFTER_WORD + (ICON_BOX.w * ICON_SCALE) / 2) * L.unit - L.w * 0.5;
   } catch (err) {
     console.warn("stone: falling back to the still image", err);
+    plants.remove();
     return null;
   }
 
@@ -698,7 +809,8 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
       canvas.removeEventListener("webglcontextlost", onLost);
       canvas.removeEventListener("webglcontextrestored", onRestored);
       audio.destroy();
-      delete root.dataset.live; delete root.dataset.hint; delete root.dataset.armed; delete root.dataset.tone;
+      plants.remove();
+      delete root.dataset.live; delete root.dataset.hint; delete root.dataset.armed;
     },
   };
 }
