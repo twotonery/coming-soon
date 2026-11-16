@@ -1,19 +1,22 @@
 // The stone slab: a relief the browser lights in real time, so the wordmark
 // and everything the visitor cuts sit in one surface under one sun.
 //
-// The stone is limestone in evening sun, with a palm's shadow swaying over one
-// corner, a little moss and wild grass, and a few small cracks.
+// Two stones, chosen by data-stone on the root:
+//   (default)  limestone in evening sun, with green and golden moss
+//   "teal"     the brand's teal stone at sunset, with orange and rose moss,
+//              dew on the moss, and the sunset caught on the stone's grain
+// Both have cracks with moss and small wall plants growing out of them, and
+// the shadows of branches (top, right, a little bottom left) swaying over them.
 //
-// Nothing answers the cursor until the first click. From then on, wherever the
-// cursor goes it carves, at the logo's own stroke width, depth and edge, and
-// throws chips and dust ahead. Cuts last until the page is reloaded.
+// A click turns carving on, the next click turns it off. While it is on, the
+// cursor carves wherever it goes, at the logo's own stroke width, depth and
+// edge, throwing chips and dust ahead. Cuts last until the page is reloaded,
+// except across the logo, where the stone slowly closes again so the logo
+// always comes back.
 //
 // It keeps a "carve map" the size of the slab (see BRUSH_FRAG). The slab drifts
-// sideways as an endless band, and the carve map, cracks, moss and grass all
+// sideways as an endless band, and the carve map, cracks, moss and plants all
 // wrap with it.
-//
-// data-look="before" on the root shows the earlier lighting (a round pool of
-// sun, no plants or cracks), kept for comparing the two.
 //
 // Framework-free on purpose: mountStone() is handed a root element holding
 //   canvas[data-stone-canvas], [data-stone-hint], button[data-stone-sound]
@@ -21,7 +24,7 @@
 
 import { createStoneAudio } from "./audio";
 import { ICON_BOX, ICON_PATHS, WORD_BOX, WORD_PATHS } from "./logo";
-import { BLUR_FRAG, BRUSH_FRAG, BRUSH_VERT, GRIT_FRAG, GRIT_VERT, PACK_FRAG, QUAD_VERT, STONE_FRAG } from "./shaders";
+import { BLUR_FRAG, BRUSH_FRAG, BRUSH_VERT, DECAY_FRAG, GRIT_FRAG, GRIT_VERT, PACK_FRAG, QUAD_VERT, STONE_FRAG } from "./shaders";
 
 export type StoneHandle = { destroy(): void };
 export type StoneOptions = {
@@ -40,14 +43,34 @@ const DRIFT_SECONDS = 95; // time for one tile to pass
 const STEM_UNITS = 3.4;   // the wordmark's stroke width: every cut is this wide
 const EDGE_SIGMA = 2.9;   // px over which a cut's edge can wander and chip (at scale 1)
 
+const HEAL_SECONDS = 3.5;  // how long a cut across the logo takes to close again
 const HINT_DELAY = 500;
 const MAX_CHIPS = 640;
 const CHIP = 12; // floats per piece: x, y, vx, vy, size, life, span, drag, turn, spin, id, kind (0 stone, 1 powder)
 
 // A stretch of the cursor's path, to be cut into the carve map.
 type Op = { ax: number; ay: number; bx: number; by: number };
-type Blade = { dx: number; h: number; lean: number; w: number; tone: number; phase: number; seeds: boolean };
-type Tuft = { x: number; y: number; blades: Blade[] };
+// A plant, drawn once to a small canvas (with its silhouette, for its shadow).
+// ax, ay: where it is rooted, in the sprite. Sizes in CSS px.
+type Sprite = { img: HTMLCanvasElement; shade: HTMLCanvasElement; ax: number; ay: number; w: number; h: number };
+// One plant on the slab: x in stone space, growing along ang, swaying by amp.
+type Plant = { x: number; y: number; sprite: Sprite; ang: number; amp: number; phase: number; scale: number; layer: number };
+
+// What grows in the cracks. On limestone: ferns, yellow-green sprigs and
+// grey-green stonecrop. On the teal stone the ferns turn a cooler green and
+// the stonecrop flushes pink and orange, as it does in strong sun.
+const FLORA = {
+  limestone: {
+    fern: ["#6a9a3c", "#7fae45", "#93bd55"], fernDark: "#3f6a2b", fernLight: "#c3df8c", stem: "#3a2f22",
+    sprig: ["#8fb84e", "#a6c965"], sprigDark: "#55803a",
+    crop: ["#8fb58d", "#a3c49c", "#7ea486"], cropTip: "#c79a8e", cropDark: "#4f6f58", shadow: "#2a1c08",
+  },
+  teal: {
+    fern: ["#3f9a6e", "#56ad7c", "#74c08a"], fernDark: "#1f5a48", fernLight: "#b5ecc0", stem: "#2a211c",
+    sprig: ["#63b07a", "#86c68c"], sprigDark: "#2f6b52",
+    crop: ["#e08f7c", "#eaa78f", "#d7748a"], cropTip: "#f8d0ae", cropDark: "#8a4a55", shadow: "#06181a",
+  },
+};
 
 function mulberry(seed: number) {
   return () => {
@@ -154,8 +177,8 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
   const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const coarse = window.matchMedia("(pointer: coarse)").matches;
   const audio = createStoneAudio(options.rollUrl);
-  const before = () => root.dataset.look === "before";
-  // grass is drawn on its own canvas, over the stone and under the page's text
+  const teal = () => root.dataset.stone === "teal";
+  // plants are drawn on their own canvas, over the stone and under the page's text
   const plants = document.createElement("canvas");
   plants.setAttribute("aria-hidden", "true");
   plants.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none";
@@ -208,11 +231,12 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
   }
 
   type Prog = ReturnType<typeof program>;
-  let pStone: Prog, pBlur: Prog, pPack: Prog, pBrush: Prog, pGrit: Prog;
+  let pStone: Prog, pBlur: Prog, pPack: Prog, pBrush: Prog, pDecay: Prog, pGrit: Prog;
   let quad: WebGLVertexArrayObject, gritVao: WebGLVertexArrayObject, gritBuf: WebGLBuffer;
-  let noiseTex: WebGLTexture, rockTex: WebGLTexture, leafTex: WebGLTexture;
-  let decorTex: WebGLTexture | null = null;
-  let tufts: Tuft[] = [];
+  let noiseTex: WebGLTexture, rockTex: WebGLTexture;
+  let decorTex: WebGLTexture | null = null, shadeTex: WebGLTexture | null = null;
+  let flora: Plant[] = [];
+  let floraTeal = false;
   let wordTex: WebGLTexture | null = null;
   let carveTex: WebGLTexture | null = null, carveFbo: WebGLFramebuffer | null = null;
 
@@ -221,6 +245,7 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     pBlur = program(QUAD_VERT, BLUR_FRAG);
     pPack = program(QUAD_VERT, PACK_FRAG);
     pBrush = program(BRUSH_VERT, BRUSH_FRAG);
+    pDecay = program(QUAD_VERT, DECAY_FRAG);
     pGrit = program(GRIT_VERT, GRIT_FRAG);
 
     quad = gl.createVertexArray()!;
@@ -243,7 +268,6 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
 
     noiseTex = texture(512, 512, true, stoneNoise(512), true);
     rockTex = texture(512, 512, true, rockNoise(512), true);
-    buildLeaf();
   }
 
   // ------------------------------------------------------------ layout
@@ -271,6 +295,7 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     L.period = L.tile * Math.max(1, Math.ceil((w + L.tile * 0.5) / L.tile));
     buildWord();
     buildCarve();
+    buildShade();
     buildDecor();
     ops.length = 0;
   }
@@ -307,8 +332,8 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     g.restore();
 
     const sharp = texture(tw, th, true, c);
-    const tmp = texture(tw, th, true), tight = texture(tw, th, true), wide = texture(tw, th, true);
-    const fTmp = target(tmp), fTight = target(tight), fWide = target(wide);
+    const tmp = texture(tw, th, true), tight = texture(tw, th, true), wide = texture(tw, th, true), zone = texture(tw, th, true);
+    const fTmp = target(tmp), fTight = target(tight), fWide = target(wide), fZone = target(zone);
     gl.disable(gl.BLEND);
     gl.viewport(0, 0, tw, th);
     gl.bindVertexArray(quad);
@@ -323,16 +348,19 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     const sTight = EDGE_SIGMA * L.scale * k, sWide = 9 * L.scale * k;
     blur(sharp, fTmp, 1, 0, sTight); blur(tmp, fTight, 0, 1, sTight);
     blur(tight, fTmp, 1, 0, sWide); blur(tmp, fWide, 0, 1, sWide);
+    // a very wide copy: the logo's whole neighbourhood, counters and the inside of the mark included
+    const sZone = 24 * L.scale * k;
+    blur(sharp, fTmp, 1, 0, sZone); blur(tmp, fZone, 0, 1, sZone);
 
     if (wordTex) gl.deleteTexture(wordTex);
     wordTex = texture(tw, th, true);
     const fWord = target(wordTex);
     gl.useProgram(pPack.p);
-    bind(0, tight, pPack.u.u_tight); bind(1, wide, pPack.u.u_wide); bind(2, sharp, pPack.u.u_sharp);
+    bind(0, tight, pPack.u.u_tight); bind(1, wide, pPack.u.u_wide); bind(2, sharp, pPack.u.u_sharp); bind(3, zone, pPack.u.u_zone);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    for (const t of [sharp, tmp, tight, wide]) gl.deleteTexture(t);
-    for (const f of [fTmp, fTight, fWide, fWord]) gl.deleteFramebuffer(f);
+    for (const t of [sharp, tmp, tight, wide, zone]) gl.deleteTexture(t);
+    for (const f of [fTmp, fTight, fWide, fZone, fWord]) gl.deleteFramebuffer(f);
   }
 
   function buildCarve() {
@@ -349,16 +377,23 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
 
   // ------------------------------------------------------------ carving
   const ops: Op[] = [];
-
-  function flushOps() {
-    if (!ops.length || !carveFbo) return;
+  let healCarry = 0, healUntil = 0;
+  const carveTarget = () => {
     gl.bindFramebuffer(gl.FRAMEBUFFER, carveFbo);
     gl.viewport(0, 0, Math.round(L.period * L.carveScale), Math.round(L.h * L.carveScale));
     gl.enable(gl.BLEND);
-    gl.blendEquation(gl.MAX);
     gl.blendFunc(gl.ONE, gl.ONE);
-    gl.useProgram(pBrush.p);
     gl.bindVertexArray(quad);
+  };
+
+  function flushOps(now: number) {
+    if (!ops.length || !carveFbo || !wordTex) return;
+    carveTarget();
+    gl.blendEquation(gl.MAX);
+    gl.useProgram(pBrush.p);
+    bind(0, wordTex, pBrush.u.u_word);
+    gl.uniform1f(pBrush.u.u_tile, L.tile);
+    gl.uniform2f(pBrush.u.u_band, L.bandTop, L.bandH);
     gl.uniform2f(pBrush.u.u_size, L.period, L.h);
     gl.uniform1f(pBrush.u.u_r, L.r);
     const reach = L.r * 2 + 2;
@@ -379,55 +414,107 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     ops.length = 0;
     gl.disable(gl.BLEND);
     gl.blendEquation(gl.FUNC_ADD);
+    healUntil = now + HEAL_SECONDS * 2.2;
   }
 
-  // ------------------------------------------------------------ leaves, moss, cracks, grass
-  // The shadow of one palm frond, drawn once: white leaf on black, its stem at
-  // the middle of the left edge, reaching right. The shader lays it over the
-  // slab (softened, since the palm is some way off) and sways it.
-  function buildLeaf() {
-    const S = 1024, c = document.createElement("canvas");
-    c.width = c.height = S;
+  // Cuts across the logo close again: their channel shrinks a little each
+  // frame, so the gap narrows to nothing and the logo's own shape is left.
+  function heal(dt: number, now: number) {
+    if (now > healUntil || !carveFbo) return;
+    healCarry += (dt * 0.5 * 255) / HEAL_SECONDS;
+    const step = Math.floor(healCarry);
+    if (step < 1) return;
+    healCarry -= step;
+    carveTarget();
+    gl.blendEquation(gl.FUNC_REVERSE_SUBTRACT);
+    gl.useProgram(pDecay.p);
+    gl.uniform1f(pDecay.u.u_amount, step / 255);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.disable(gl.BLEND);
+    gl.blendEquation(gl.FUNC_ADD);
+  }
+
+  // ------------------------------------------------------------ leaf shadows
+  // The shadows of branches somewhere out of frame, painted once per size in
+  // the viewport's own shape: three layers, one per colour channel, so the
+  // shader can sway each from its own root. Red: a bough across the top.
+  // Green: one down the right side. Blue: a sprig in the bottom left corner.
+  // (The roots here must match the ones the stone shader swings them from.)
+  function buildShade() {
+    const W = 1024, H = Math.max(384, Math.min(1536, Math.round((1024 * L.h) / L.w)));
+    const c = document.createElement("canvas");
+    c.width = W; c.height = H;
     const g = c.getContext("2d")!;
-    g.fillStyle = "#000"; g.fillRect(0, 0, S, S);
-    g.fillStyle = "#fff"; g.strokeStyle = "#fff";
-    const rnd = mulberry(9102);
-    const x0 = 0.04 * S, len = 0.92 * S, mid = S / 2;
-    const rib = (t: number) => [x0 + len * t, mid + len * 0.10 * t * t] as const; // it sags toward the tip
-    g.lineWidth = S * 0.006;
-    g.beginPath();
-    for (let t = 0; t <= 1.001; t += 0.02) g.lineTo(...rib(t));
-    g.stroke();
-    const N = 46;
-    for (let i = 0; i < N; i++) {
-      const t = 0.06 + (0.92 * i) / (N - 1);
-      const [bx, by] = rib(t);
-      // leaflets are short near the stem and at the tip, and sweep forward
-      const reach = len * 0.30 * Math.pow(Math.sin(Math.PI * Math.min(1, t * 1.08)), 0.6) * (0.85 + rnd() * 0.3);
-      for (const side of [-1, 1]) {
-        if (rnd() < 0.06) continue; // one missing here and there
-        const ang = side * (1.15 - 0.55 * t + (rnd() - 0.5) * 0.16);
-        const droop = reach * (0.18 + rnd() * 0.2);
-        const ex = bx + Math.cos(ang) * reach, ey = by + Math.sin(ang) * reach + droop * (side > 0 ? 0.5 : 0.15);
-        const nx = -Math.sin(ang), ny = Math.cos(ang), wd = len * 0.011 * (0.8 + rnd() * 0.5);
-        const mx = (bx + ex) / 2, my = (by + ey) / 2 + droop * 0.15;
-        g.beginPath();
-        g.moveTo(bx, by);
-        g.quadraticCurveTo(mx + nx * wd, my + ny * wd, ex, ey);
-        g.quadraticCurveTo(mx - nx * wd, my - ny * wd, bx, by);
-        g.fill();
+    g.fillStyle = "#000"; g.fillRect(0, 0, W, H);
+    g.globalCompositeOperation = "lighter";
+    g.lineCap = "round";
+    const rnd = mulberry(5150);
+    const leaf = (x: number, y: number, ang: number, len: number) => {
+      const ex = x + Math.cos(ang) * len, ey = y + Math.sin(ang) * len;
+      const nx = -Math.sin(ang) * len * 0.2, ny = Math.cos(ang) * len * 0.2;
+      const mx = x + (ex - x) * 0.45, my = y + (ey - y) * 0.45;
+      g.beginPath();
+      g.moveTo(x, y);
+      g.quadraticCurveTo(mx + nx, my + ny, ex, ey);
+      g.quadraticCurveTo(mx - nx, my - ny, x, y);
+      g.fill();
+    };
+    // wood that wanders and thins, forks into twigs, and carries leaves in
+    // pairs along its thinner parts and a tuft at each tip
+    const bough = (x: number, y: number, ang: number, len: number, width: number, depth: number) => {
+      const steps = Math.max(3, Math.round(len / (W * 0.018)));
+      const seg = len / steps, curl = (rnd() - 0.5) * 0.05;
+      for (let i = 0; i < steps; i++) {
+        const t = i / steps;
+        ang += curl + (rnd() - 0.5) * 0.12;
+        const nx = x + Math.cos(ang) * seg, ny = y + Math.sin(ang) * seg;
+        g.lineWidth = Math.max(1, width * (1 - 0.8 * t));
+        g.beginPath(); g.moveTo(x, y); g.lineTo(nx, ny); g.stroke();
+        if (depth >= 1 || t > 0.45) for (const side of [-1, 1]) if (rnd() < 0.7) leaf(nx, ny, ang + side * (0.45 + rnd() * 0.7), W * (0.020 + rnd() * 0.022));
+        if (depth < 3 && i > 0 && rnd() < 0.22) {
+          bough(nx, ny, ang + (rnd() < 0.5 ? -1 : 1) * (0.4 + rnd() * 0.6), len * (1 - t) * (0.3 + rnd() * 0.3) + W * 0.04, width * (1 - 0.7 * t) * 0.6, depth + 1);
+        }
+        x = nx; y = ny;
       }
-    }
-    leafTex = texture(S, S, false, c, true);
+      for (let k = 0; k < 3; k++) leaf(x, y, ang + (k - 1) * 0.5 + (rnd() - 0.5) * 0.3, W * (0.022 + rnd() * 0.02));
+    };
+    g.fillStyle = g.strokeStyle = "#f00";
+    bough(W * 1.03, -H * 0.06, 3.02, W * 0.86, W * 0.011, 0);
+    bough(W * 0.55, -H * 0.06, 2.35, W * 0.30, W * 0.007, 1);
+    g.fillStyle = g.strokeStyle = "#0f0";
+    bough(W * 1.05, H * 0.22, 2.0, H * 0.62, W * 0.009, 0);
+    g.fillStyle = g.strokeStyle = "#00f";
+    bough(-W * 0.04, H * 0.97, -0.45, W * 0.20, W * 0.006, 1);
+    if (shadeTex) gl.deleteTexture(shadeTex);
+    shadeTex = texture(W, H, false, c, true);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   }
 
-  // What grows on the slab and where it has cracked, laid out once per size
-  // and painted into a texture the stone shader reads: r = cracks, g = moss.
-  // Kept to the slab's edges, clear of the wordmark and the copy, and sparse.
+  // ------------------------------------------------------------ cracks, moss, plants
+  function sprite(w: number, h: number, ax: number, ay: number, shadow: string, draw: (g: CanvasRenderingContext2D) => void): Sprite {
+    const k = Math.max(2, L.dpr); // drawn large, so they stay smooth when turned
+    const img = document.createElement("canvas");
+    img.width = Math.ceil(w * k); img.height = Math.ceil(h * k);
+    const g = img.getContext("2d")!;
+    g.scale(k, k);
+    draw(g);
+    const shade = document.createElement("canvas");
+    shade.width = img.width; shade.height = img.height;
+    const sg = shade.getContext("2d")!;
+    sg.drawImage(img, 0, 0);
+    sg.globalCompositeOperation = "source-in";
+    sg.fillStyle = shadow; sg.fillRect(0, 0, shade.width, shade.height);
+    return { img, shade, ax, ay, w, h };
+  }
+  const oval = (g: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number, rot: number) => { g.beginPath(); g.ellipse(x, y, rx, ry, rot, 0, 6.2832); g.fill(); };
+
+  // What has cracked and what grows there, laid out once per size and stone.
+  // Cracks and moss are painted into a texture the stone shader reads
+  // (r = cracks, g and b = two kinds of moss); the plants are sprites.
   function buildDecor() {
     const rnd = mulberry(7700 + Math.round(L.period));
+    const pal = (floraTeal = teal()) ? FLORA.teal : FLORA.limestone;
     const k = Math.min(1, 2048 / L.period), big = Math.max(0.75, L.scale);
     const c = document.createElement("canvas");
     c.width = Math.max(2, Math.round(L.period * k)); c.height = Math.max(2, Math.round(L.h * k));
@@ -437,104 +524,166 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     g.scale(k, k);
     g.lineCap = "round";
     const wrapped = (draw: () => void) => { for (const dx of [0, -L.period, L.period]) { g.save(); g.translate(dx, 0); draw(); g.restore(); } };
-    const moss = (x: number, y: number, r: number, a: number) => wrapped(() => {
-      const grad = g.createRadialGradient(x, y, 0, x, y, r);
-      grad.addColorStop(0, `rgba(0,255,0,${a})`); grad.addColorStop(1, "rgba(0,255,0,0)");
+    const moss = (x: number, y: number, r: number, a: number, second: boolean) => wrapped(() => {
+      const grad = g.createRadialGradient(x, y, 0, x, y, r), rgb = second ? "0,0,255" : "0,255,0";
+      grad.addColorStop(0, `rgba(${rgb},${a})`); grad.addColorStop(1, `rgba(${rgb},0)`);
       g.fillStyle = grad; g.beginPath(); g.arc(x, y, r, 0, 6.3); g.fill();
     });
-    const clump = (x: number, y: number, n: number, sx: number, sy: number) => {
-      for (let i = 0; i < n; i++) moss(x + (rnd() + rnd() + rnd() - 1.5) * sx, y + (rnd() + rnd() - 1) * sy, (6 + rnd() * 12) * big, 0.3 + rnd() * 0.3);
-    };
-    const tuft = (x: number, y: number, tall: number, n: number) => {
-      const blades: Blade[] = [];
-      for (let i = 0; i < n; i++) blades.push({
-        dx: (rnd() + rnd() - 1) * 9 * big, h: tall * (0.45 + 0.55 * rnd()), lean: (rnd() + rnd() - 1) * 0.55,
-        w: (1.7 + rnd() * 1.7) * big, tone: rnd(), phase: rnd() * 6.3, seeds: rnd() < 0.22,
+
+    // ---- the plants, a few of each drawn once and reused at different sizes
+    // a small fern frond: a dark wiry stem with paired round leaflets
+    const fern = (len: number) => {
+      const pad = 8, half = len * 0.25 + pad, sag = (rnd() - 0.5) * len * 0.3;
+      return sprite(len + pad * 2, half * 2, pad, half, pal.shadow, (q) => {
+        const at = (t: number) => [pad + len * t, half + sag * t * t] as const;
+        const n = Math.max(6, Math.round(len / 7));
+        for (let i = 0; i < n; i++) {
+          const t = (i + 0.6) / n, [x, y] = at(t), a = Math.atan2(2 * sag * t, len);
+          const size = len * 0.105 * (0.5 + 0.5 * Math.sin(Math.PI * Math.min(1, t * 1.25 + 0.12))) * (1 - 0.35 * t) * (0.88 + rnd() * 0.24);
+          for (const side of [-1, 1]) {
+            const cx = x - Math.sin(a) * side * size * 0.95, cy = y + Math.cos(a) * side * size * 0.95, rot = a + Math.PI / 2 + side * 0.2;
+            q.fillStyle = pal.fernDark; oval(q, cx + 0.5, cy + 0.6, size * 1.04, size * 0.78, rot);
+            q.fillStyle = pal.fern[Math.floor(rnd() * 3)]; oval(q, cx, cy, size, size * 0.72, rot);
+            q.globalAlpha = 0.45; q.fillStyle = pal.fernLight; oval(q, cx - size * 0.2, cy - size * 0.22, size * 0.5, size * 0.3, rot); q.globalAlpha = 1;
+          }
+        }
+        q.strokeStyle = pal.stem; q.lineWidth = 1.1; q.lineCap = "round";
+        q.beginPath(); q.moveTo(...at(0));
+        for (let t = 0.1; t <= 1.001; t += 0.1) q.lineTo(...at(t));
+        q.stroke();
       });
-      tufts.push({ x, y, blades });
-      clump(x, y, 5, 10 * big, 4 * big); // grass grows out of a little moss
     };
-    // a crack: a wandering line that thins as it goes, now and then forking
-    const crack = (x: number, y: number, ang: number, length: number, width: number, onPoint?: (x: number, y: number, t: number) => void) => {
+    // a sprig: a short stem whose side stalks each end in a little fan of round lobes
+    const sprig = (len: number) => {
+      const pad = 10, half = len * 0.42 + pad;
+      return sprite(len + pad * 2, half * 2, pad, half, pal.shadow, (q) => {
+        const nodes = 3 + Math.floor(rnd() * 3);
+        q.strokeStyle = pal.sprigDark; q.lineWidth = 1; q.lineCap = "round";
+        q.beginPath(); q.moveTo(pad, half); q.lineTo(pad + len, half); q.stroke();
+        for (let i = 0; i <= nodes; i++) {
+          const t = (i + 0.5) / (nodes + 1), x = pad + len * t, tip = i === nodes;
+          for (const side of tip ? [0] : [i % 2 ? 1 : -1]) {
+            const a = tip ? 0 : side * (0.9 + rnd() * 0.4), reach = len * (0.20 + rnd() * 0.12);
+            const hx = (tip ? pad + len : x) + Math.cos(a) * reach, hy = half + Math.sin(a) * reach;
+            q.beginPath(); q.moveTo(tip ? pad + len : x, half); q.lineTo(hx, hy); q.stroke();
+            const r = len * (0.09 + rnd() * 0.04);
+            for (const d of [-0.7, 0, 0.7]) {
+              const lx = hx + Math.cos(a + d) * r * 0.9, ly = hy + Math.sin(a + d) * r * 0.9;
+              q.fillStyle = pal.sprigDark; oval(q, lx + 0.5, ly + 0.6, r * 1.05, r * 0.95, a + d);
+              q.fillStyle = pal.sprig[Math.floor(rnd() * 2)]; oval(q, lx, ly, r, r * 0.88, a + d);
+            }
+          }
+        }
+      });
+    };
+    // stonecrop: a tight rosette of fleshy leaves, paler at their tips
+    const crop = (r: number) => sprite(r * 2 + 6, r * 2 + 6, r + 3, r + 3, pal.shadow, (q) => {
+      const cx = r + 3, cy = r + 3, turn = rnd() * 6.3;
+      q.fillStyle = pal.cropDark; oval(q, cx + 0.4, cy + 0.5, r * 0.92, r * 0.92, 0);
+      for (const [count, at, long, wide] of [[8, 0.55, 0.46, 0.27], [5, 0.24, 0.30, 0.20]] as const) {
+        for (let i = 0; i < count; i++) {
+          const a = turn + (i / count) * 6.2832 + (rnd() - 0.5) * 0.25 + (count === 5 ? 0.4 : 0);
+          const px = cx + Math.cos(a) * r * at, py = cy + Math.sin(a) * r * at;
+          q.fillStyle = pal.crop[Math.floor(rnd() * 3)]; oval(q, px, py, r * long, r * wide, a);
+          q.globalAlpha = 0.7; q.fillStyle = pal.cropTip; oval(q, px + Math.cos(a) * r * long * 0.55, py + Math.sin(a) * r * long * 0.55, r * long * 0.32, r * wide * 0.6, a); q.globalAlpha = 1;
+        }
+      }
+      q.fillStyle = pal.crop[1]; oval(q, cx, cy, r * 0.13, r * 0.13, 0);
+    });
+    const ferns = [44, 56, 68, 82, 96].map((len) => fern(len * big));
+    const sprigs = [28, 36, 44].map((len) => sprig(len * big));
+    const crops = [6.5, 8, 10, 12].map((r) => crop(r * big));
+    const pick = <T,>(list: T[]) => list[Math.floor(rnd() * list.length)];
+
+    flora = [];
+    const grow = (x: number, y: number, out: number) => {
+      // out: the way plants here lean out from the crack (mostly upward: they reach for light)
+      const what = rnd();
+      if (what < 0.40) {
+        const count = 2 + Math.floor(rnd() * 3);
+        for (let i = 0; i < count; i++) flora.push({ x: x + (rnd() - 0.5) * 6, y: y + (rnd() - 0.5) * 4, sprite: pick(ferns), ang: out + (i / (count - 1) - 0.5) * 1.5 + (rnd() - 0.5) * 0.3, amp: 0.05 + rnd() * 0.04, phase: rnd() * 6.3, scale: 0.8 + rnd() * 0.35, layer: 2 });
+      } else if (what < 0.64) {
+        const count = 2 + Math.floor(rnd() * 3);
+        for (let i = 0; i < count; i++) flora.push({ x: x + (rnd() - 0.5) * 8, y: y + (rnd() - 0.5) * 5, sprite: pick(sprigs), ang: out + (rnd() - 0.5) * 1.6, amp: 0.06 + rnd() * 0.05, phase: rnd() * 6.3, scale: 0.85 + rnd() * 0.3, layer: 1 });
+      } else {
+        const count = 5 + Math.floor(rnd() * 8);
+        for (let i = 0; i < count; i++) flora.push({ x: x + (rnd() + rnd() - 1) * 24 * big, y: y + (rnd() + rnd() - 1) * 11 * big, sprite: pick(crops), ang: rnd() * 6.3, amp: 0, phase: 0, scale: 0.8 + rnd() * 0.4, layer: 0 });
+      }
+    };
+    // A crack: a wandering line, pulled gently back toward the way it set out
+    // (plus whatever steer adds), thinning as it goes, with the odd short
+    // fork. Moss fills it, and plants root in it every so often.
+    const crack = (x: number, y: number, heading: number, length: number, width: number, lush: number, steer?: (x: number, y: number) => number) => {
       const steps = Math.max(2, Math.round(length / 5));
+      let ang = heading, second = rnd() < 0.5, untilPlant = (20 + rnd() * 50) * big, untilSwap = 60 + rnd() * 120;
       for (let i = 0; i < steps; i++) {
         const t = i / steps;
-        ang += (rnd() - 0.5) * 0.4;
-        if (rnd() < 0.08) ang += (rnd() - 0.5) * 1.3; // a kink
-        const nx = x + Math.cos(ang) * 5, ny = y + Math.sin(ang) * 5;
-        const x0 = x, y0 = y;
-        const wd = Math.max(0.7, width * (1 - 0.75 * t));
+        ang += (rnd() - 0.5) * 0.5 + (heading - ang) * 0.14 + (steer ? steer(x, y) : 0);
+        if (rnd() < 0.07) ang += (rnd() - 0.5) * 1.1; // a kink
+        const nx = x + Math.cos(ang) * 5, ny = y + Math.sin(ang) * 5, x0 = x, y0 = y;
+        const wd = Math.max(0.8, width * (1 - 0.7 * t));
         wrapped(() => {
           // a faint wide stroke under a fine one, so the line has a soft edge
-          for (const [mul, a] of [[2.6, 0.22], [1, 0.75]] as const) {
+          for (const [mul, a] of [[2.8, 0.25], [1, 0.8]] as const) {
             g.strokeStyle = `rgba(255,0,0,${a})`; g.lineWidth = wd * mul; g.beginPath(); g.moveTo(x0, y0); g.lineTo(nx, ny); g.stroke();
           }
         });
-        if (length > 40 && rnd() < 0.05) crack(nx, ny, ang + (rnd() < 0.5 ? -1 : 1) * (0.5 + rnd() * 0.5), length * (1 - t) * 0.5, width * (1 - 0.6 * t) * 0.7);
-        onPoint?.(nx, ny, t);
+        if (lush > 0) {
+          if ((untilSwap -= 5) < 0) { second = !second; untilSwap = 60 + rnd() * 120; }
+          if (rnd() < 0.9 * lush) moss(nx + (rnd() - 0.5) * 9, ny + (rnd() - 0.5) * 9, (8 + rnd() * 9) * big, 0.55 + rnd() * 0.3, second);
+          if (rnd() < 0.10 * lush) moss(nx + (rnd() - 0.5) * 26, ny + (rnd() - 0.5) * 20, (15 + rnd() * 12) * big, 0.7, rnd() < 0.3 ? !second : second);
+          if ((untilPlant -= 5) < 0) {
+            untilPlant = (45 + rnd() * 80) * big / lush;
+            const up = Math.sin(ang - Math.PI / 2) < 0 ? ang - Math.PI / 2 : ang + Math.PI / 2; // the crack's upward side
+            grow(nx, ny, rnd() < 0.8 ? up : up + Math.PI);
+          }
+        }
+        if (length > 60 && rnd() < 0.045) crack(nx, ny, ang + (rnd() < 0.5 ? -1 : 1) * (0.5 + rnd() * 0.5), length * (1 - t) * 0.4, wd * 0.7, lush * 0.6);
         x = nx; y = ny;
       }
     };
 
-    tufts = [];
-    const grassTall = Math.min(46 * big, L.h * 0.056);
-    const n = Math.max(2, Math.round(L.period / 950));
-    for (let i = 0; i < n; i++) {
-      // one crack down from the top edge, with moss along its upper part and a tuft on a ledge
-      const tx = ((i + 0.15 + rnd() * 0.5) / n) * L.period;
-      let ledge = 0.25 + rnd() * 0.3, grown = false;
-      crack(tx, -2, Math.PI / 2 + (rnd() - 0.5) * 0.7, L.h * (0.12 + rnd() * 0.12), 1.5 * big, (x, y, t) => {
-        if (t < 0.6 && rnd() < 0.5) moss(x + (rnd() - 0.5) * 8, y + (rnd() - 0.5) * 6, (4 + rnd() * 7) * big, 0.4);
-        if (!grown && t > ledge) { grown = true; tuft(x, y, grassTall * 0.7, 6 + Math.floor(rnd() * 4)); ledge = 2; }
-      });
-      // one shorter crack up from the bottom edge, where grass has taken hold
-      const bx = ((i + 0.6 + rnd() * 0.35) / n) * L.period;
-      crack(bx, L.h + 2, -Math.PI / 2 + (rnd() - 0.5) * 0.8, L.h * (0.05 + rnd() * 0.05), 1.4 * big);
-      tuft(bx + (rnd() - 0.5) * 14, L.h + 2, grassTall, 9 + Math.floor(rnd() * 6));
-      // moss creeping in over the top edge, and a smaller patch at the foot
-      clump(((i + rnd()) / n) * L.period, L.h * 0.01, 18 + Math.floor(rnd() * 12), 46 * big, 12 * big);
-      clump(((i + rnd()) / n) * L.period, L.h * 0.995, 9 + Math.floor(rnd() * 6), 24 * big, 6 * big);
+    const tiles = Math.round(L.period / L.tile);
+    for (let j = 0; j < tiles; j++) {
+      const X0 = j * L.tile;
+      // down the slab through the gap between the wordmark and the mark, so it
+      // crosses the middle without breaking a letter
+      const gap = X0 + (GAP_AFTER_ICON / 2 + WORD_BOX.w + GAP_AFTER_WORD * 0.5) * L.unit;
+      crack(gap + (rnd() - 0.5) * 30, -3, Math.PI / 2, L.h * (0.58 + rnd() * 0.08), 3.0 * big, 1, (x) => Math.max(-0.12, Math.min(0.12, (x - gap) * 0.006)));
+      // across the upper part of the slab
+      const uy = L.h * (0.09 + rnd() * 0.09);
+      crack(X0 + L.tile * (0.04 + rnd() * 0.12), uy, (rnd() - 0.5) * 0.3, L.tile * (0.30 + rnd() * 0.14), 2.6 * big, 1, (_, y) => Math.max(-0.1, Math.min(0.1, (uy - y) * 0.006)));
+      // a shorter one low down, between the copy and the foot of the slab
+      const ly = L.h * (0.845 + rnd() * 0.03);
+      crack(X0 + L.tile * (0.70 + rnd() * 0.2), ly, Math.PI + (rnd() - 0.5) * 0.3, L.tile * (0.16 + rnd() * 0.10), 2.2 * big, 0.9, (_, y) => Math.max(-0.1, Math.min(0.1, (y - ly) * 0.006)));
+      // fine bare cracks in from the edges
+      crack(X0 + L.tile * (0.55 + rnd() * 0.3), -3, Math.PI / 2 + (rnd() - 0.5) * 0.7, L.h * (0.06 + rnd() * 0.08), 1.4 * big, 0.5);
+      crack(X0 + L.tile * (0.15 + rnd() * 0.3), L.h + 3, -Math.PI / 2 + (rnd() - 0.5) * 0.8, L.h * (0.05 + rnd() * 0.06), 1.4 * big, 0.6);
     }
+    flora.sort((a, b) => a.layer - b.layer);
     if (decorTex) gl.deleteTexture(decorTex);
     decorTex = texture(c.width, c.height, true, c);
   }
 
-  // Wild grass: each blade a tapered sliver that leans with the wind, drawn
-  // with its shadow on the stone behind it. Tufts ride the slab as it drifts.
-  const GREENS = ["#4f7426", "#6a8f33", "#86a544", "#3f6424", "#a4ae58"];
+  // Each plant with its shadow on the stone behind it. Ferns and sprigs nod in
+  // the wind from where they are rooted; everything rides the slab as it drifts.
   function drawPlants(t: number) {
     if (!pg) return;
     pg.setTransform(L.dpr, 0, 0, L.dpr, 0, 0);
     pg.clearRect(0, 0, L.w, L.h);
-    if (before()) return;
-    for (const tf of tufts) {
-      const x = ((((tf.x - scroll) % L.period) + L.period) % L.period);
+    for (const pass of [0, 1]) for (const pl of flora) {
+      const sp = pl.sprite, reach = Math.max(sp.w, sp.h) * pl.scale + 8;
+      const x = ((((pl.x - scroll) % L.period) + L.period) % L.period);
       for (const sx of [x, x - L.period]) {
-        if (sx < -80 || sx > L.w + 80) continue;
-        const gust = still ? 0 : Math.sin(t * 1.25 + tf.x * 0.013) * 0.55 + Math.sin(t * 0.47 + tf.x * 0.004) * 0.45;
-        for (const pass of [0, 1]) for (const b of tf.blades) {
-          const bend = b.lean + (still ? 0 : (gust + Math.sin(t * 2.3 + b.phase) * 0.25) * 0.16 * (b.h / 30 + 0.4));
-          const up = b.h * Math.sqrt(1 - Math.min(0.8, bend * bend));
-          const ox = pass ? 0 : 3.5, oy = pass ? 0 : 2.5; // the shadow falls down and to the right
-          const bx = sx + b.dx + ox, by = tf.y + oy, tx = bx + bend * b.h, ty = by - up, cx = bx + bend * b.h * 0.22, cy = by - up * 0.6;
-          pg.fillStyle = pass ? GREENS[Math.floor(b.tone * GREENS.length)] : "rgba(70,48,18,0.20)";
-          pg.beginPath();
-          pg.moveTo(bx - b.w / 2, by);
-          pg.quadraticCurveTo(cx - b.w * 0.35, cy, tx, ty);
-          pg.quadraticCurveTo(cx + b.w * 0.35, cy, bx + b.w / 2, by);
-          pg.fill();
-          if (pass && b.seeds) {
-            // a seed head: a few grains up the last third of the blade
-            pg.fillStyle = "#b8ab68";
-            for (let i = 0; i < 5; i++) {
-              const u = 0.68 + i * 0.07, v = 1 - u;
-              const px = v * v * bx + 2 * v * u * cx + u * u * tx, py = v * v * by + 2 * v * u * cy + u * u * ty;
-              pg.beginPath();
-              pg.ellipse(px + (i % 2 ? 1.3 : -1.3), py, 1.5, 0.9, bend + (i % 2 ? 0.6 : -0.6), 0, 6.3);
-              pg.fill();
-            }
-          }
-        }
+        if (sx < -reach || sx > L.w + reach) continue;
+        const wind = still || !pl.amp ? 0 : (Math.sin(t * 1.25 + pl.x * 0.013) * 0.55 + Math.sin(t * 0.47 + pl.x * 0.004) * 0.45 + Math.sin(t * 2.3 + pl.phase) * 0.3) * pl.amp;
+        pg.save();
+        pg.translate(sx + (pass ? 0 : 3.2), pl.y + (pass ? 0 : 2.4)); // the shadow falls down and to the right
+        pg.rotate(pl.ang + wind);
+        pg.scale(pl.scale, pl.scale);
+        pg.globalAlpha = pass ? 1 : 0.26;
+        pg.drawImage(pass ? sp.img : sp.shade, -sp.ax, -sp.ay, sp.w, sp.h);
+        pg.restore();
       }
     }
   }
@@ -611,6 +760,7 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, chipOut, 0, n * 7);
     gl.uniform2f(pGrit.u.u_res, L.w, L.h);
     gl.uniform1f(pGrit.u.u_dpr, L.dpr);
+    gl.uniform1f(pGrit.u.u_teal, teal() ? 1 : 0);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.drawArrays(gl.POINTS, 0, n);
@@ -622,14 +772,15 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
   // stone. fresh: the next touch starts a new cut instead of joining the last.
   const hand = { x: 0, y: 0, known: false, down: false, mouse: true, sx: 0, sy: 0, dirX: 1, dirY: 0, speed: 0, lastMove: 0, fresh: true };
   const pill = { x: 0, y: 0, placed: false };
-  let armed = false; // nothing answers the hand until the first click
+  let armed = false; // carving is off until a click turns it on
+  let invited = false;
   const driftSpeed = () => (still ? 0 : L.tile / DRIFT_SECONDS);
 
   function local(e: PointerEvent) {
     const r = root.getBoundingClientRect();
     return [e.clientX - r.left, e.clientY - r.top] as const;
   }
-  // the pill trails the cursor with a little give
+  // the pill trails the cursor with a little give, whenever carving is off
   function followHint(dt: number) {
     if (!hint || armed || !hand.known || !hand.mouse) return;
     const tx = Math.max(8, Math.min(hand.x + 16, L.w - hint.offsetWidth - 8));
@@ -638,6 +789,11 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     const k = 1 - Math.exp(-dt * 13);
     pill.x += (tx - pill.x) * k; pill.y += (ty - pill.y) * k;
     hint.style.translate = `${pill.x.toFixed(1)}px ${pill.y.toFixed(1)}px`;
+  }
+  function setArmed(on: boolean) {
+    armed = on;
+    if (on) { hand.fresh = true; delete root.dataset.hint; root.dataset.armed = ""; }
+    else { delete root.dataset.armed; if (invited) root.dataset.hint = "on"; }
   }
   // Cut from where the hand last touched the stone to (sx, sy).
   function cutTo(sx: number, sy: number) {
@@ -681,14 +837,11 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     hand.lastMove = performance.now();
     try { root.setPointerCapture(e.pointerId); } catch { /* not capturable; carving still works */ }
     audio.unlock();
-    if (!armed) {
-      // the first click wakes the stone: from here on the cursor carves wherever it goes
-      armed = true;
-      hand.fresh = true;
-      delete root.dataset.hint;
-      root.dataset.armed = "";
-    }
-    if (hand.fresh) {
+    // A click turns carving on, the next turns it off. A finger has no hover,
+    // so its first touch turns carving on and it then carves while it is down.
+    if (hand.mouse) setArmed(!armed);
+    else if (!armed) setArmed(true);
+    if (armed && hand.fresh) {
       cutTo(x + scroll, y);
       const len = Math.hypot(hand.dirX, hand.dirY) || 1;
       throwChips(x, y, hand.dirX / len, hand.dirY / len, 220, 14, 3.2);
@@ -725,6 +878,7 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     const dt = Math.min(0.05, last ? now - last : 0.016);
     last = now;
     layout();
+    if (teal() !== floraTeal) buildDecor(); // the other stone grows different things
     scroll += driftSpeed() * dt;
     // the slab keeps moving under a cursor that is held still, and it keeps cutting
     if (hand.known) {
@@ -737,7 +891,8 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     audio.setMotion(armed ? Math.pow(Math.min(1, hand.speed / 900), 0.7) : 0);
     followHint(dt);
 
-    flushOps();
+    flushOps(now);
+    heal(dt, now);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, canvas!.width, canvas!.height);
@@ -747,9 +902,9 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     bind(1, wordTex!, pStone.u.u_word);
     bind(2, carveTex!, pStone.u.u_carve);
     bind(3, rockTex, pStone.u.u_rock);
-    bind(4, leafTex, pStone.u.u_leaf);
+    bind(4, shadeTex!, pStone.u.u_shade);
     bind(5, decorTex!, pStone.u.u_decor);
-    gl.uniform1f(pStone.u.u_look, before() ? 0 : 1);
+    gl.uniform1f(pStone.u.u_teal, floraTeal ? 1 : 0);
     gl.uniform1f(pStone.u.u_sway, still ? 0 : now % 4000);
     gl.uniform2f(pStone.u.u_res, L.w, L.h);
     gl.uniform1f(pStone.u.u_dpr, L.dpr);
@@ -768,7 +923,7 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
 
   function onLost(e: Event) { e.preventDefault(); lost = true; }
   function onRestored() {
-    wordTex = null; carveTex = null; carveFbo = null; decorTex = null; L.w = 0;
+    wordTex = null; carveTex = null; carveFbo = null; decorTex = null; shadeTex = null; L.w = 0;
     setupStatic();
     lost = false;
   }
@@ -785,7 +940,7 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
   }
 
   if (hint && coarse) hint.textContent = "Tap to carve";
-  const hintTimer = window.setTimeout(() => { if (!armed) root.dataset.hint = "on"; }, HINT_DELAY);
+  const hintTimer = window.setTimeout(() => { invited = true; if (!armed) root.dataset.hint = "on"; }, HINT_DELAY);
   root.addEventListener("pointermove", onMove);
   root.addEventListener("pointerdown", onDown);
   root.addEventListener("pointerup", onUp);

@@ -30,8 +30,9 @@ void main() {
   o = vec4(sum / wsum);
 }`;
 
-// Packs the three logo masks into one texture: r = tight ramp (the cut wall),
-// g = wide ramp (soft shade in the hollows), b = the sharp shape.
+// Packs the logo masks into one texture: r = tight ramp (the cut wall),
+// g = wide ramp (soft shade in the hollows), b = the sharp shape, a = the
+// logo's whole neighbourhood (where cuts heal: see BRUSH_FRAG).
 export const PACK_FRAG = `#version 300 es
 precision highp float;
 in vec2 v_uv;
@@ -39,13 +40,18 @@ out vec4 o;
 uniform sampler2D u_tight;
 uniform sampler2D u_wide;
 uniform sampler2D u_sharp;
+uniform sampler2D u_zone;
 void main() {
-  o = vec4(texture(u_tight, v_uv).r, texture(u_wide, v_uv).r, texture(u_sharp, v_uv).r, 1.0);
+  o = vec4(texture(u_tight, v_uv).r, texture(u_wide, v_uv).r, texture(u_sharp, v_uv).r, texture(u_zone, v_uv).r);
 }`;
 
 // One stretch of the cursor's path, cut into the carve map with MAX blending.
 // The map holds "cones": 1 on the stroke's centre line, 0.5 at its edge, 0 one
 // stroke-width out, which the stone shader turns into the logo's own edge.
+//   r = cuts that stay. They are held back from the logo, tapering off as
+//       they near it.
+//   g = every cut as made, logo or not. This channel slowly closes again
+//       (DECAY_FRAG), so a cut across the logo heals and the logo comes back.
 export const BRUSH_VERT = `#version 300 es
 in vec2 a_pos;
 uniform vec4 u_rect;  // x0, y0, x1, y1 in stone px
@@ -61,14 +67,27 @@ export const BRUSH_FRAG = `#version 300 es
 precision highp float;
 in vec2 v_p;
 out vec4 o;
+uniform sampler2D u_word; // the logo band; a is the logo's whole neighbourhood
+uniform float u_tile;
+uniform vec2 u_band;
 uniform vec2 u_a;      // stroke start
 uniform vec2 u_b;      // stroke end
 uniform float u_r;     // half the stroke's width
 void main() {
   vec2 ab = u_b - u_a;
   float t = clamp(dot(v_p - u_a, ab) / max(dot(ab, ab), 1e-4), 0.0, 1.0);
-  o = vec4(max(1.0 - length(v_p - (u_a + ab * t)) / (2.0 * u_r), 0.0));
+  float cone = max(1.0 - length(v_p - (u_a + ab * t)) / (2.0 * u_r), 0.0);
+  vec2 uv = vec2(v_p.x / u_tile, (v_p.y - u_band.x) / u_band.y);
+  float logo = smoothstep(0.03, 0.13, texture(u_word, uv).a * step(0.0, uv.y) * step(uv.y, 1.0));
+  o = vec4(cone * (1.0 - logo), cone, 0.0, 0.0);
 }`;
+
+// Closes the healing channel a little (subtractive blend on g).
+export const DECAY_FRAG = `#version 300 es
+precision highp float;
+out vec4 o;
+uniform float u_amount;
+void main() { o = vec4(0.0, u_amount, 0.0, 0.0); }`;
 
 export const STONE_FRAG = `#version 300 es
 precision highp float;
@@ -77,8 +96,8 @@ uniform sampler2D u_stone; // tileable noise: r grain, g mottle, b pits, a secon
 uniform sampler2D u_rock;  // tileable: r holes, g cell (0 at its border, 1 at its heart), b the cell's own number
 uniform sampler2D u_word;  // the logo band (see PACK_FRAG)
 uniform sampler2D u_carve; // the visitor's cuts (see BRUSH_FRAG)
-uniform sampler2D u_leaf;  // one palm frond, white on black, stem at the left edge's middle
-uniform sampler2D u_decor; // laid over the whole slab: r cracks, g moss
+uniform sampler2D u_shade; // leaf shadows over the viewport, one layer per channel
+uniform sampler2D u_decor; // laid over the whole slab: r cracks, g and b two kinds of moss
 uniform vec2 u_res;        // viewport, CSS px
 uniform float u_dpr;
 uniform float u_scroll;    // slab drift, CSS px
@@ -88,16 +107,16 @@ uniform vec2 u_band;       // top and height of the logo band
 uniform float u_period;    // width of the carve map
 uniform float u_scale;     // 1 on a desktop-sized slab, smaller on phones
 uniform float u_edge;      // turns a cone into the same edge ramp the logo has
-uniform float u_look;      // 1 = open sun, palm shadow, moss and cracks; 0 = the earlier round pool of light
+uniform float u_teal;      // 0 = limestone in evening sun, 1 = the brand's teal stone at sunset
 
-const vec3 SUN = normalize(vec3(-0.58, -0.50, 0.45)); // evening: low, raking in from the upper left
+const vec3 SUN = normalize(vec3(-0.58, -0.50, 0.45)); // low, raking in from the upper left
 const float DEPTH = 11.0; // one depth for the logo and for every cut
 
 vec3 word(vec2 s) {
   vec2 uv = vec2(s.x / u_tile, (s.y - u_band.x) / u_band.y);
   return texture(u_word, uv).rgb * step(0.0, uv.y) * step(uv.y, 1.0);
 }
-float carve(vec2 s) { return texture(u_carve, vec2(s.x / u_period, s.y / u_res.y)).r; }
+float carve(vec2 s) { vec4 c = texture(u_carve, vec2(s.x / u_period, s.y / u_res.y)); return max(c.r, c.g); }
 float ramp(float cone) { return clamp((cone - 0.5) * u_edge + 0.5, 0.0, 1.0); }
 
 // The hollows: the logo and everything cut by the visitor go through the same
@@ -112,7 +131,7 @@ float relief(vec2 s, float wob, float deep, out float m, out float cut) {
   return -DEPTH * u_scale * deep * m;
 }
 
-// The limestone's own surface: grit, the shallow facets left by dressing it by
+// The stone's own surface: grit, the shallow facets left by dressing it by
 // hand, the odd hole, and tool tracks on the floors of the hollows; or, where
 // moss has taken hold, the moss.
 float surface(vec2 s, float hollow, float moss, out float holes) {
@@ -136,14 +155,15 @@ float surface(vec2 s, float hollow, float moss, out float holes) {
   return mix(h, k.g * 2.2 + (f.a - 0.5) * 3.4 + (b.r - 0.5) * 1.6, moss);
 }
 
-// The shadow of a palm frond rooted at pivot (off the slab), reaching along
-// ang for len px. It swings from its stem, and whips more toward its tip.
-float frond(vec2 p, vec2 pivot, float ang, float len, float soft, float phase) {
-  float a = ang + sin(u_sway * 0.83 + phase) * 0.030 + sin(u_sway * 0.31 + phase * 2.3) * 0.045;
-  vec2 d = p - pivot;
-  vec2 l = vec2(cos(a) * d.x + sin(a) * d.y, -sin(a) * d.x + cos(a) * d.y) / len; // along, across
-  l.y += sin(u_sway * 1.7 + l.x * 5.0 + phase) * 0.014 * l.x;
-  return texture(u_leaf, vec2(0.04 + 0.92 * l.x, 0.5 + 0.92 * l.y), soft).r;
+// One layer of leaf shadow. Its branch is rooted at root (in viewport
+// fractions, just off the slab) and swings about it in the wind; the leaves
+// shiver more the further out they hang.
+vec3 leaves(vec2 p, vec2 root, float phase, float amp) {
+  float a = (sin(u_sway * 0.83 + phase) * 0.6 + sin(u_sway * 0.31 + phase * 2.3)) * amp;
+  vec2 c = root * u_res, d = p - c;
+  d = vec2(cos(a) * d.x - sin(a) * d.y, sin(a) * d.x + cos(a) * d.y);
+  d += sin(u_sway * 2.2 + d.yx * 0.021 + phase) * length(d) * 0.0022;
+  return texture(u_shade, (c + d) / u_res, 1.2).rgb;
 }
 
 // Keeps the brightest sunlit grains from burning out to flat white.
@@ -175,10 +195,11 @@ void main() {
 
   // ---- what has grown on the stone, and where it has cracked. Moss sits in
   // soft cushions with a broken, feathered edge; cutting through it clears it.
-  vec4 dec = texture(u_decor, vec2(s.x / u_period, s.y / u_res.y)) * u_look;
+  vec4 dec = texture(u_decor, vec2(s.x / u_period, s.y / u_res.y));
   float crack = smoothstep(0.04, 0.85, dec.r) * (1.0 - m);
-  float mossy = dec.g * (1.0 - smoothstep(0.3, 0.7, ramp(cut)));
-  float moss = smoothstep(0.22, 0.62, mossy + (nA.a - 0.5) * 0.36 + (nB.r - 0.5) * 0.30 + (X.g - 0.5) * 0.22);
+  float mossy = max(dec.g, dec.b) * (1.0 - smoothstep(0.3, 0.7, ramp(cut)));
+  float moss = smoothstep(0.20, 0.70, mossy + (nA.a - 0.5) * 0.40 + (nB.r - 0.5) * 0.30);
+  float kind = dec.b / max(dec.g + dec.b, 0.001); // 0 = the first moss, 1 = the second
   float damp = smoothstep(0.08, 0.40, mossy) * (1.0 - moss); // stone stays darker around it
 
   float holes, th;
@@ -186,14 +207,14 @@ void main() {
   float fx = surface(s + vec2(e, 0.0), m, moss, th);
   float fy = surface(s + vec2(0.0, e), m, moss, th);
   slope += vec2(fx - f0, fy - f0) / e;
-  float grown = moss * 2.6 - crack * 2.2 + (nC.g - 0.5) * 7.0;
+  float grown = moss * 2.6 - crack * 3.2 + (nC.g - 0.5) * 7.0;
   slope += vec2(dFdx(grown), -dFdy(grown)) * u_dpr;
 
   vec3 n = normalize(vec3(-slope, 1.0));
   float ndl = max(dot(n, SUN), 0.0) / SUN.z;
   ndl = ndl < 1.0 ? ndl : 1.0 + (ndl - 1.0) * 0.5;
 
-  // ---- long evening shadows thrown into the hollows by their sunward walls
+  // ---- long shadows thrown into the hollows by their sunward walls
   vec2 toSun = normalize(SUN.xy);
   float rise = SUN.z / length(SUN.xy);
   float lit = 1.0;
@@ -206,49 +227,57 @@ void main() {
   vec3 w0 = word(s);
   float ao = m * (1.0 - smoothstep(0.55, 1.0, max(w0.g, cut))) * 0.30 + holes * 0.32 * (1.0 - moss);
 
-  // ---- the sun
-  float sunny;
-  if (u_look > 0.5) {
-    // open evening sun across the whole slab, a touch stronger toward the side
-    // it comes from; a palm out of frame lays one frond's shadow over the
-    // upper right corner
-    float big = max(u_res.x, u_res.y * 1.3);
-    float palm = frond(p, vec2(u_res.x * 1.03, -u_res.y * 0.07), 2.62, big * 0.50, 2.0, 0.0);
-    sunny = (1.0 - palm * 0.62) * (1.05 - 0.10 * (q.x * 0.6 + q.y * 0.4));
-  } else {
-    // the earlier look: a round pool of light with a leaf-broken edge
-    float rag = texture(u_stone, p / 1500.0 + vec2(u_sway * 0.004, 0.0)).g - 0.5;
-    float pool = 1.0 - smoothstep(0.40, 1.05, length((q - vec2(0.5, 0.56)) / vec2(0.70, 0.60)) + rag * 0.35);
-    float leaf = texture(u_stone, p / 620.0 + vec2(u_sway * 0.007, u_sway * 0.004)).g
-               + (texture(u_stone, p / 260.0 - vec2(u_sway * 0.009, 0.0)).g - 0.5) * 0.5;
-    sunny = clamp(pool + (smoothstep(0.30, 0.70, leaf) - 0.5) * pool * (1.0 - pool) * 2.2, 0.0, 1.0);
-    sunny = mix(0.34, 1.0, sunny);
-  }
+  // ---- the sun: open and low across the whole slab, a touch stronger toward
+  // the side it comes from. Branches out of frame shade it: a bough across
+  // the top, one down the right side, a sprig in the bottom left corner.
+  // Each thins out as it reaches in from its edge, leaving the middle in sun.
+  float shade = max(max(leaves(p, vec2(1.03, -0.06), 0.0, 0.011).r * (1.0 - smoothstep(0.20, 0.42, q.y)),
+                        leaves(p, vec2(1.05, 0.22), 1.9, 0.014).g * 0.92 * smoothstep(0.66, 0.84, q.x)),
+                        leaves(p, vec2(-0.04, 0.97), 4.1, 0.016).b * 0.85);
+  float sunny = (1.0 - shade * 0.60) * (1.05 - 0.10 * (q.x * 0.6 + q.y * 0.4));
 
   // ---- the stone's colour
-  vec3 alb = vec3(0.790, 0.745, 0.655);
+  vec3 alb = mix(vec3(0.790, 0.745, 0.655), vec3(0.250, 0.425, 0.455), u_teal);
   alb *= 1.0 + ((nC.g - 0.5) * 0.30 + (nB.g - 0.5) * 0.14 + (nA.r - 0.5) * 0.08) * 0.55;
   float inCell = smoothstep(0.15, 0.5, X.g);
-  alb = mix(alb, vec3(0.93, 0.90, 0.83), step(0.93, X.b) * inCell * 0.5);  // shell
-  alb = mix(alb, vec3(0.58, 0.48, 0.36), step(X.b, 0.07) * inCell * 0.6);  // grit
+  alb = mix(alb, mix(vec3(0.93, 0.90, 0.83), vec3(0.47, 0.64, 0.65), u_teal), step(0.93, X.b) * inCell * 0.5);  // pale flecks
+  alb = mix(alb, mix(vec3(0.58, 0.48, 0.36), vec3(0.12, 0.23, 0.25), u_teal), step(X.b, 0.07) * inCell * 0.6);  // dark grit
   alb *= 1.0 + (texture(u_stone, vec2(s.x / 2600.0, s.y / 240.0)).g - 0.5) * 0.10; // laid down in beds
-  alb = mix(alb, vec3(0.74, 0.60, 0.40), smoothstep(0.52, 0.80, nC.a) * (0.5 + 0.5 * nB.g) * 0.22); // ochre staining
+  alb = mix(alb, mix(vec3(0.74, 0.60, 0.40), vec3(0.17, 0.32, 0.35), u_teal), smoothstep(0.52, 0.80, nC.a) * (0.5 + 0.5 * nB.g) * 0.22); // weathering
   alb *= 1.0 - holes * 0.45;       // holes are dark inside
   alb *= mix(1.0, 0.86, m);        // the hollows hold more grime
-  alb = mix(alb, alb * vec3(0.46, 0.40, 0.34), crack);
+  alb = mix(alb, alb * vec3(0.40, 0.35, 0.30), crack);
   alb *= 1.0 - damp * 0.16;
-  // moss: deep green in its hollows, yellower where it catches the sun, never one flat colour
-  vec3 green = mix(vec3(0.21, 0.29, 0.11), vec3(0.50, 0.56, 0.22), clamp(nB.a * 1.4 - 0.2 + (nA.r - 0.5) * 0.8, 0.0, 1.0));
-  green *= 0.82 + 0.36 * X.b;                          // each little tuft its own shade
-  green = mix(green, vec3(0.60, 0.57, 0.30), step(0.92, X.b) * inCell * 0.5);
-  green *= 0.75 + 0.25 * smoothstep(0.3, 0.9, mossy);  // thinner and darker toward its edge
-  alb = mix(alb, green, moss);
+  // Moss, never one flat colour. On limestone: green, and a golden-brown kind.
+  // On the teal stone: orange, and a rose-pink kind.
+  float tone = clamp(nB.a * 1.4 - 0.2 + (nA.r - 0.5) * 0.8, 0.0, 1.0);
+  vec3 mossA = mix(mix(vec3(0.21, 0.29, 0.11), vec3(0.50, 0.56, 0.22), tone), mix(vec3(0.72, 0.33, 0.10), vec3(0.96, 0.60, 0.22), tone), u_teal);
+  vec3 mossB = mix(mix(vec3(0.34, 0.26, 0.10), vec3(0.62, 0.50, 0.22), tone), mix(vec3(0.70, 0.30, 0.40), vec3(0.94, 0.60, 0.63), tone), u_teal);
+  vec3 pile = mix(mossA, mossB, smoothstep(0.35, 0.65, kind + (nB.g - 0.5) * 0.3));
+  pile *= 0.82 + 0.36 * X.b;                          // each little tuft its own shade
+  pile *= 0.75 + 0.25 * smoothstep(0.3, 0.9, mossy);  // thinner and darker toward its edge
+  alb = mix(alb, pile, moss);
 
-  // ---- light: warm sun, cool sky in the shade
-  vec3 sunC = vec3(1.00, 0.83, 0.62) * 0.72;
-  vec3 skyC = vec3(0.66, 0.72, 0.84) * 0.72;
+  // ---- light: warm sun, cool sky in the shade. At sunset on the teal stone
+  // the sun stays pale enough to leave the teal teal; its orange shows up in
+  // what the stone reflects.
+  vec3 sunC = mix(vec3(1.00, 0.83, 0.62) * 0.72, vec3(1.00, 0.80, 0.62) * 0.80, u_teal);
+  vec3 skyC = mix(vec3(0.66, 0.72, 0.84) * 0.72, vec3(0.50, 0.66, 0.80) * 0.62, u_teal);
   vec3 col = alb * (skyC * (1.0 - ao) * (0.75 + 0.25 * n.z) + sunC * ndl * sunny * lit);
   col += alb * sunC * 0.10 * sunny * m; // sun bounced around inside a hollow, so its shade is not dead
+  if (u_teal > 0.5) {
+    // the sunset caught on every grain and edge turned toward it
+    float facing = max(dot(n, normalize(SUN + vec3(0.0, 0.0, 1.0))), 0.0);
+    vec3 ember = vec3(1.00, 0.50, 0.19);
+    col += ember * (pow(facing, 26.0) * 0.75 + pow(facing, 7.0) * 0.09) * sunny * lit * (1.0 - 0.6 * moss);
+    // the walls and rims that face it glow, and the whole slab warms toward the sun's side
+    col += ember * smoothstep(1.05, 1.9, max(dot(n, SUN), 0.0) / SUN.z) * 0.30 * sunny * lit;
+    col += ember * 0.11 * clamp(1.0 - q.x * 0.8 - q.y * 0.5, 0.0, 1.0) * sunny;
+    // dew on the moss: scattered beads that catch the sun and wink
+    vec4 bead = texture(u_rock, s / 120.0 + 0.61);
+    float wink = 0.25 + 0.75 * pow(0.5 + 0.5 * sin(u_sway * 2.4 + bead.b * 400.0), 3.0);
+    col += vec3(1.00, 0.84, 0.62) * step(0.86, bead.b) * smoothstep(0.25, 0.70, bead.g) * moss * wink * sunny * 1.7;
+  }
   col = shoulder(col);
 
   col += (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) / 255.0;
@@ -275,6 +304,7 @@ export const GRIT_FRAG = `#version 300 es
 precision highp float;
 in float v_alpha;
 in vec3 v_look;
+uniform float u_teal;
 out vec4 o;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 // A broken piece of stone seen from above: a convex shape left by five uneven
@@ -298,7 +328,7 @@ void main() {
     // powder: a soft heap of separate grains, not a mist
     float a = 1.0 - smoothstep(0.0, 1.25, length(p));
     a *= a * (0.35 + 1.3 * hash(floor(gl_FragCoord.xy) + v_look.y * 91.0));
-    o = vec4(vec3(1.00, 0.95, 0.84) * a * v_alpha, a * v_alpha);
+    o = vec4(mix(vec3(1.00, 0.95, 0.84), vec3(0.62, 0.76, 0.76), u_teal) * a * v_alpha, a * v_alpha);
     return;
   }
   float face, unused;
@@ -308,6 +338,7 @@ void main() {
   // a flat top; toward the rim each broken face catches the low sun or turns from it
   float rim = smoothstep(-0.42, 0.0, d);
   float lit = 0.66 + face * 0.42 * rim + (hash(floor(p * 5.0) + v_look.y * 31.0) - 0.5) * 0.24;
-  vec3 col = vec3(0.93, 0.87, 0.75) * (0.8 + 0.4 * fract(v_look.y * 13.7)) * lit * vec3(1.08, 0.96, 0.82);
+  vec3 rock = mix(vec3(0.93, 0.87, 0.75) * vec3(1.08, 0.96, 0.82), vec3(0.40, 0.60, 0.61), u_teal);
+  vec3 col = rock * (0.8 + 0.4 * fract(v_look.y * 13.7)) * lit;
   o = vec4(col * body * v_alpha, max(body, shade) * v_alpha);
 }`;

@@ -72,12 +72,17 @@ body { font-family: var(--font-sans), system-ui, sans-serif; }
    proportions (set at 1440 x 900) on any screen.
 ---------------------------------------------------------------- */
 /* stone:start */
-/* Limestone in evening sun. --ink is the text colour (as r g b). The text
+/* Limestone in evening sun by default. --ink is the text colour (as r g b). The text
    carries a soft stone-coloured halo so it stays readable over the stone's
    grain. Until the stone is drawing, the flat colour below stands in for it. */
 .stone {
   --ink: 14 31 33; background: #dccdb0; color: rgb(var(--ink));
   --halo: 0 0 .45em rgb(244 233 211 / .95), 0 0 .9em rgb(244 233 211 / .7), 0 0 1px rgb(244 233 211 / .8);
+}
+/* the brand's teal stone (data-stone="teal"): white text, with a dark halo */
+.stone[data-stone="teal"] {
+  --ink: 255 255 255; background: #2c5257;
+  --halo: 0 0 .45em rgb(9 33 36 / .8), 0 0 .9em rgb(9 33 36 / .55);
 }
 .stone-canvas { opacity: 0; transition: opacity .6s ease; }
 .stone[data-live] .stone-canvas { opacity: 1; }
