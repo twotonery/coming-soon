@@ -8,7 +8,7 @@ const PRINCIPLES = [
 
 export function About() {
   return (
-    <section id="about" className={`paper py-20 lg:py-[120px] ${GUTTER}`}>
+    <section id="about" className={`paper pt-20 pb-16 lg:pt-[120px] lg:pb-24 ${GUTTER}`}>
       <div className="grid gap-y-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,868px)] lg:gap-y-16">
         <p data-reveal="up" className="pt-1.5 text-[16px] leading-6 lg:w-[254px]">About</p>
         <p data-reveal="words" style={delay(80)} className={`${DISPLAY} indent-[88px]`}>

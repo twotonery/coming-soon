@@ -1,0 +1,67 @@
+/* The founder section (Founder.tsx). Plain CSS under the Tailwind loader, so
+   class names are global, hence founder-. */
+
+/* ---- the portrait: a postage stamp printed on the page's own paper.
+   The stamp is a sheet of the same paper in a warmer stock, cut to a perforated
+   edge (a row of teeth, 14px apart, round its border). It lies a little
+   crooked, with the small shadow of something stuck down by hand. */
+.founder-stamp-wrap {
+  position: relative; width: min(100%, 328px); rotate: -3deg;
+  filter: drop-shadow(0 1px 1px rgb(14 31 33 / .22)) drop-shadow(0 12px 20px rgb(14 31 33 / .11));
+}
+.founder-stamp {
+  --paper: #f6f1e7; --tooth: 14px;
+  margin: 0; padding: calc(var(--tooth) / 2 + 14px); padding-bottom: calc(var(--tooth) / 2 + 10px);
+  mask:
+    radial-gradient(circle at 50% 50%, #000 5px, #0000 5.6px) 0 0 / var(--tooth) var(--tooth) round,
+    linear-gradient(#000 0 0) 50% 50% / calc(100% - var(--tooth)) calc(100% - var(--tooth)) no-repeat;
+}
+/* The print. The photo is taken down to its greys, and its darks are lifted to
+   the brand's teal (the screen layer), which makes it a one-ink print; the
+   whole print is then multiplied into the stamp's paper, so the paper's tooth
+   and fibres come through the ink exactly as they do through real printing.
+   A fine line rule round it, as engraved stamps have. */
+.founder-print {
+  position: relative; isolation: isolate; aspect-ratio: 4 / 5; overflow: hidden;
+  mix-blend-mode: multiply; outline: 1px solid rgb(31 75 80 / .55); outline-offset: 3px;
+}
+.founder-print img { display: block; width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) contrast(1.08); }
+.founder-print::after { content: ""; position: absolute; inset: 0; background: #1f4b50; mix-blend-mode: screen; }
+/* ink never lies perfectly flat: it thins where the paper's tooth is high */
+.founder-print::before {
+  content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: url("/paper/grain.png") 0 0 / 200px 200px; mix-blend-mode: screen; filter: invert(1) contrast(2.6) brightness(1.5); opacity: .5;
+}
+.founder-caption {
+  display: flex; justify-content: space-between; margin-top: 14px;
+  font-size: 10px; line-height: 14px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: #1f4b50;
+}
+/* The postmark, struck over the stamp's corner and on across the sheet, in the
+   same ink as the page's text. Multiplied, so it soaks into the paper and the
+   print alike, and that is what ties the photo to the page. */
+.founder-postmark {
+  position: absolute; right: -150px; bottom: 26px; width: 262px; rotate: 9deg;
+  color: #0e1f21; opacity: .72; mix-blend-mode: multiply; pointer-events: none;
+}
+@media (max-width: 639px) { .founder-postmark { right: -36px; bottom: 30px; width: 190px; } }
+
+/* ---- the companies: one slow line that never ends. The row is written out
+   twice and slid left by half its width; the ends fade into the paper. Each
+   logo is its own SVG used as a mask over ink, multiplied into the paper like
+   a rubber stamp. It stops while a pointer rests on it. */
+.founder-marquee {
+  overflow: hidden;
+  mask: linear-gradient(90deg, #0000, #000 9%, #000 91%, #0000);
+}
+.founder-track { display: flex; width: max-content; animation: founder-run 38s linear infinite; }
+.founder-marquee:hover .founder-track { animation-play-state: paused; }
+.founder-logo {
+  flex: none; width: 190px; height: 68px; margin-right: 28px;
+  background: #0e1f21; opacity: .78; mix-blend-mode: multiply;
+  mask-size: contain; mask-repeat: no-repeat; mask-position: center;
+  -webkit-mask-size: contain; -webkit-mask-repeat: no-repeat; -webkit-mask-position: center;
+}
+@keyframes founder-run { to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) {
+  .founder-marquee { overflow-x: auto; }
+}

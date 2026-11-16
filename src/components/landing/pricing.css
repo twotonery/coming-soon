@@ -1,47 +1,109 @@
-/* Pricing tickets, cut to the Figma ticket (Code-layer node 25:219). Plain CSS
-   under the Tailwind loader, so class names are global, hence pricing-.
+/* Pricing tickets, cut to the Figma ticket (Twotonery Brand, 426:833 Growth
+   and 426:998 Dedicated). Plain CSS under the Tailwind loader, so class names
+   are global, hence pricing-.
 
-   .pricing-paper is the ticket's paper, masked to its edge: concave 20px
-   corners, 13px notches either side of the tear, and the stamp window
-   (pricing-stamp.svg) punched straight through, so the glass in the window
-   shows what lies behind. From lg the ticket lies down at 872 x 338: window
-   at 32,32 (372 x 274), tear at x 437 with its perforation punched through
+   .pricing-paper is the ticket's paper (the page's .paper, in the ticket's own
+   colour), masked to its edge: concave 20px corners, 13px notches either side
+   of the tear, and the perforation punched through, so the ticket behind shows
+   in the slots. From lg the ticket lies down at 872 x 338: tear at x 437
    (6px slots, 10px dash + round caps, 26px pitch, from 22px down). Below lg
-   it stands up: the window spans the top 24px in, and the tear sits under
-   it (the perforation there is drawn in the markup). */
+   it stands up: the stamp spans the top 24px in, and the tear sits under it
+   (the perforation there is drawn in the markup). */
 .pricing-paper {
   --tear: calc((100cqw - 48px) * 274 / 372 + 48px);
+  background-image: url("/paper/grain.png"), url("/paper/cloud.png"), var(--wash);
+  background-size: 320px 320px, 1400px 1400px, 100% 100%;
+  background-blend-mode: multiply, multiply, normal;
   mask-image:
-    url("/figma/pricing-stamp.svg"),
     radial-gradient(circle 20px at 0 0, #0000 98%, #000),
     radial-gradient(circle 20px at 100% 0, #0000 98%, #000),
     radial-gradient(circle 20px at 0 100%, #0000 98%, #000),
     radial-gradient(circle 20px at 100% 100%, #0000 98%, #000),
     radial-gradient(circle 13px at 0 var(--tear), #0000 98%, #000),
     radial-gradient(circle 13px at 100% var(--tear), #0000 98%, #000);
-  mask-position: 24px 24px, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0;
-  mask-size: calc(100% - 48px) auto, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%;
+  mask-size: 100% 100%;
   mask-repeat: no-repeat;
-  mask-composite: exclude, intersect, intersect, intersect, intersect, intersect, add;
+  mask-composite: intersect, intersect, intersect, intersect, intersect, add;
 }
+/* Growth: white stock that picks up a little of the mint at its foot.
+   Dedicated: mint stock deepening to teal toward the far corner. */
+.pricing-paper[data-stock="growth"] { --wash: linear-gradient(180deg, #fdfdfb 38%, #e3f1f0); }
+.pricing-paper[data-stock="dedicated"] { --wash: linear-gradient(152deg, #0dd3b1 4%, #19a996 46%, #2f6f75 96%); }
 @media (min-width: 64rem) {
   .pricing-paper {
     mask-image:
       url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='295'%3E%3Cg%3E%3Crect y='0' width='6' height='16' rx='3'/%3E%3Crect y='26' width='6' height='16' rx='3'/%3E%3Crect y='52' width='6' height='16' rx='3'/%3E%3Crect y='78' width='6' height='16' rx='3'/%3E%3Crect y='104' width='6' height='16' rx='3'/%3E%3Crect y='130' width='6' height='16' rx='3'/%3E%3Crect y='156' width='6' height='16' rx='3'/%3E%3Crect y='182' width='6' height='16' rx='3'/%3E%3Crect y='208' width='6' height='16' rx='3'/%3E%3Crect y='234' width='6' height='16' rx='3'/%3E%3Crect y='260' width='6' height='16' rx='3'/%3E%3Crect y='286' width='6' height='9' rx='3'/%3E%3C/g%3E%3C/svg%3E"),
-      url("/figma/pricing-stamp.svg"),
       radial-gradient(circle 20px at 0 0, #0000 98%, #000),
       radial-gradient(circle 20px at 100% 0, #0000 98%, #000),
       radial-gradient(circle 20px at 0 100%, #0000 98%, #000),
       radial-gradient(circle 20px at 100% 100%, #0000 98%, #000),
       radial-gradient(circle 13px at 437px 0, #0000 98%, #000),
       radial-gradient(circle 13px at 437px 100%, #0000 98%, #000);
-    mask-position: 434px 22px, 32px 32px, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0;
-    mask-size: 6px 295px, 372px 274px, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%;
-    mask-composite: exclude, exclude, intersect, intersect, intersect, intersect, intersect, add;
+    mask-position: 434px 22px, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0;
+    mask-size: 6px 295px, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%;
+    mask-composite: exclude, intersect, intersect, intersect, intersect, intersect, add;
   }
 }
 
-/* The glass in the window: the stamp shape again, over a blurred backdrop. */
+/* The stamp stuck on the ticket: the painting, cut to the stamp's perforated edge. */
 .pricing-stamp {
   mask: url("/figma/pricing-stamp.svg") 0 0 / 100% 100% no-repeat;
 }
+
+/* The two tickets lie in one pile. The plan in front lies flat; the other lies
+   under it, turned 2deg with its centre 47px lower and 5.6px right (as in
+   Figma), so its foot and its button show below. On phones the turned ticket
+   would poke past the screen edge, so it turns less there. */
+.pricing-pile { perspective: 1600px; }
+.pricing-card { position: relative; grid-area: 1 / 1; transform-origin: 50% 50%; will-change: transform; }
+.pricing-card[data-role="front"] { z-index: 2; transform: none; }
+.pricing-card[data-role="back"] { z-index: 1; transform: translate(3px, 28px) rotate(1deg); }
+@media (min-width: 64rem) {
+  .pricing-card[data-role="back"] { transform: translate(5.6px, 47px) rotate(2deg); }
+}
+/* Changing plan turns the pile over like a card (data-turned is set from the
+   first change on, so nothing plays when the page loads). The front ticket
+   tips back over its top edge until it is edge-on, then drops in underneath;
+   the other comes up flat to meet the eye. sounds.ts times its slap to the
+   moment the new front lands (about 240ms in). */
+.pricing-pile[data-turned] .pricing-card[data-role="back"] { animation: pricing-tuck .62s cubic-bezier(.3, 0, .2, 1) both; }
+.pricing-pile[data-turned] .pricing-card[data-role="front"] { animation: pricing-rise .62s cubic-bezier(.3, 0, .2, 1) both; }
+@keyframes pricing-tuck {
+  0% { z-index: 3; transform: none; animation-timing-function: cubic-bezier(.5, 0, .9, .5); }
+  38% { z-index: 3; transform: translateY(-34px) rotateX(86deg); }
+  39% { z-index: 1; transform: translate(5.6px, 60px) rotateX(-70deg) rotate(2deg); animation-timing-function: cubic-bezier(.1, .6, .3, 1); }
+  100% { z-index: 1; transform: translate(5.6px, 47px) rotate(2deg); }
+}
+@keyframes pricing-rise {
+  0% { transform: translate(5.6px, 47px) rotate(2deg); }
+  30% { transform: translate(5.6px, 47px) rotate(2deg); animation-timing-function: cubic-bezier(.2, .9, .3, 1.15); }
+  100% { transform: none; }
+}
+@media (max-width: 63.999rem) {
+  @keyframes pricing-tuck {
+    0% { z-index: 3; transform: none; animation-timing-function: cubic-bezier(.5, 0, .9, .5); }
+    38% { z-index: 3; transform: translateY(-24px) rotateX(86deg); }
+    39% { z-index: 1; transform: translate(3px, 36px) rotateX(-70deg) rotate(1deg); animation-timing-function: cubic-bezier(.1, .6, .3, 1); }
+    100% { z-index: 1; transform: translate(3px, 28px) rotate(1deg); }
+  }
+  @keyframes pricing-rise {
+    0%, 30% { transform: translate(3px, 28px) rotate(1deg); }
+    100% { transform: none; }
+  }
+}
+
+/* What is written on a ticket moves with its place in the pile (from lg, where
+   the ticket has a fixed height to move in). In front: the name large, the
+   copy and a solid button gathered at the foot. Behind: the name small at the
+   head and the button, now an outline, alone at the foot, where it shows below
+   the ticket in front. Two springs do the moving: the one above the copy is
+   open in front, the one under it opens behind. */
+.pricing-spring { flex: 0 0 0px; transition: flex-grow .5s cubic-bezier(.3, 0, .2, 1); }
+.pricing-name { transition: font-size .5s cubic-bezier(.3, 0, .2, 1), line-height .5s cubic-bezier(.3, 0, .2, 1); }
+.pricing-cta { border: .51px solid transparent; transition: background-color .3s ease, color .3s ease, border-color .3s ease; }
+@media (min-width: 64rem) {
+  .pricing-card[data-role="front"] .pricing-spring[data-at="head"] { flex-grow: 1; }
+  .pricing-card[data-role="back"] .pricing-spring[data-at="foot"] { flex-grow: 1; }
+  .pricing-card[data-role="back"] .pricing-name { font-size: 32px; line-height: 40px; }
+}
+.pricing-card[data-role="back"] .pricing-cta { background-color: transparent; color: inherit; border-color: currentColor; }
