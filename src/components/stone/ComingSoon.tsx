@@ -7,19 +7,18 @@ import { mountStone } from "./engine";
 // The coming-soon page: the footer's debossed wordmark as a slab of stone the
 // visitor can carve. engine.ts draws the stone; this is the page around it
 // (its styles are the .stone-* rules in globals.css).
-// The two images underneath are the original footer art: they show until the
-// stone is running, and stay if the browser can't draw it.
+// The image underneath is the original footer wordmark: it shows until the
+// stone is running, and stays if the browser can't draw it.
 export function ComingSoon() {
   const root = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!root.current) return;
-    const stone = mountStone(root.current);
+    const stone = mountStone(root.current, { rollUrl: "/sfx/stone-roll.mp3" });
     return () => stone?.destroy();
   }, []);
 
   return (
-    <main ref={root} className="stone fixed inset-0 touch-none overflow-hidden bg-teal select-none">
-      <Image src="/figma/footer-bg.png" alt="" fill preload sizes="100vw" className="object-cover" />
+    <main ref={root} className="stone fixed inset-0 touch-none overflow-hidden select-none">
       <div aria-hidden className="absolute inset-x-0 top-[43.7%] h-[160px] -translate-y-1/2 mix-blend-luminosity sm:h-[260px] lg:h-[392px]">
         <Image src="/figma/footer-wordmark.png" alt="" fill sizes="100vw" className="object-cover" />
       </div>

@@ -72,6 +72,14 @@ body { font-family: var(--font-sans), system-ui, sans-serif; }
    proportions (set at 1440 x 900) on any screen.
 ---------------------------------------------------------------- */
 /* stone:start */
+/* Andesite in dark mode, limestone in light. --ink is the text colour (as r g b);
+   data-theme on .stone overrides the system setting. Until the stone is drawing,
+   the flat colour below stands in for it. */
+.stone { --ink: 255 255 255; --glass: 255 255 255; background: #2b2a28; color: rgb(var(--ink)); }
+.stone[data-theme="light"] { --ink: 16 50 54; background: #dccdb0; }
+@media (prefers-color-scheme: light) {
+  .stone:not([data-theme="dark"]) { --ink: 16 50 54; background: #dccdb0; }
+}
 .stone-canvas { opacity: 0; transition: opacity .6s ease; }
 .stone[data-live] .stone-canvas { opacity: 1; }
 
@@ -80,11 +88,11 @@ body { font-family: var(--font-sans), system-ui, sans-serif; }
   translate: 0 -50%; text-align: center; pointer-events: none;
 }
 .stone-tag {
-  top: 76.5%; color: #fff; text-wrap: balance;
+  top: 76.5%; color: rgb(var(--ink)); text-wrap: balance;
   font-size: clamp(14px, min(1.6vw, 2.9vh), 26px); line-height: 1.36;
 }
 .stone-copy, .stone-sound {
-  top: 94.2%; color: rgb(255 255 255 / .6);
+  top: 94.2%; color: rgb(var(--ink) / .7);
   font-size: clamp(11px, min(1.1vw, 2vh), 18px); line-height: 1.5;
 }
 .stone-sound {
@@ -93,7 +101,7 @@ body { font-family: var(--font-sans), system-ui, sans-serif; }
   padding: 0; border: 0; background: none; font-family: inherit; cursor: pointer;
   transition: color .2s ease;
 }
-.stone-sound:hover, .stone-sound:focus-visible { color: #fff; }
+.stone-sound:hover, .stone-sound:focus-visible { color: rgb(var(--ink)); }
 .stone-sound svg { width: 1em; height: 1em; }
 .stone-sound .stone-sound-off, .stone-sound[data-muted="true"] .stone-sound-on { display: none; }
 .stone-sound[data-muted="true"] .stone-sound-off { display: inline; }
@@ -105,7 +113,7 @@ body { font-family: var(--font-sans), system-ui, sans-serif; }
   position: absolute; left: 50%; top: 85.5%; translate: -50% -50%;
   padding: .5em 1.05em; border-radius: 999px; white-space: nowrap; pointer-events: none;
   font-size: clamp(12px, min(.95vw, 1.8vh), 15px); line-height: 1.4; font-weight: 400; letter-spacing: .01em;
-  color: rgb(255 255 255 / .94);
+  color: rgb(var(--ink) / .94);
   background: linear-gradient(180deg, rgb(255 255 255 / .2), rgb(255 255 255 / .07));
   -webkit-backdrop-filter: blur(14px) saturate(1.5) brightness(1.08);
   backdrop-filter: blur(14px) saturate(1.5) brightness(1.08);

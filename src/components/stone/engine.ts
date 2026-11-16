@@ -1,8 +1,11 @@
 // The stone slab: a relief the browser lights in real time, so the wordmark
 // and everything the visitor does to the stone sit in one surface under one lamp.
 //
+// The stone is andesite / lava stone in dark mode and limestone in light mode,
+// lit by a low golden-hour sun that pools over the middle of the slab.
+//
 // After the first click the hand "bends" the stone: it parts under the cursor
-// and closes again behind it, throwing chips ahead. A click sets whatever is
+// and closes again behind it, throwing chips and dust ahead. A click sets whatever is
 // open at that moment as a cut; holding and dragging cuts a full groove. Cuts
 // have the logo's own stroke width, depth and edge, and last until reload.
 //
@@ -19,6 +22,10 @@ import { ICON_BOX, ICON_PATHS, WORD_BOX, WORD_PATHS } from "./logo";
 import { BLUR_FRAG, BRUSH_FRAG, BRUSH_VERT, DECAY_FRAG, GRIT_FRAG, GRIT_VERT, PACK_FRAG, QUAD_VERT, STONE_FRAG } from "./shaders";
 
 export type StoneHandle = { destroy(): void };
+export type StoneOptions = {
+  /** The hover sound: a URL (or data: URL) of the rocks-tumbling recording. */
+  rollUrl?: string;
+};
 
 // ---- the band's proportions, in logo units (logo.svg is 159 x 30)
 const ICON_SCALE = 1.2;   // the mark is cut a little larger than the letters
@@ -28,14 +35,14 @@ const TILE_UNITS = WORD_BOX.w + GAP_AFTER_WORD + ICON_BOX.w * ICON_SCALE + GAP_A
 const BAND_PAD = 40;      // px of plain stone above and below the band in its texture
 const BAND_CENTRE = 0.437; // of the viewport height
 const DRIFT_SECONDS = 95; // time for one tile to pass
-const STEM_UNITS = 2.9;   // the wordmark's stroke width: every cut is this wide
-const EDGE_SIGMA = 2.3;   // px of softness on the logo's cut edge (at scale 1)
+const STEM_UNITS = 3.4;   // the wordmark's stroke width: every cut is this wide
+const EDGE_SIGMA = 2.9;   // px over which a cut's edge can wander and chip (at scale 1)
 const CLOSE_SECONDS = 0.9; // how long parted stone takes to close again
 const CLOSE_RATE = 0.5 / CLOSE_SECONDS; // in cone units: 1 at the centre line, 0.5 at the edge
 
 const HINT_DELAY = 500;
-const MAX_CHIPS = 360;
-const CHIP = 11; // floats per chip: x, y, vx, vy, size, life, span, drag, turn, spin, tone
+const MAX_CHIPS = 640;
+const CHIP = 12; // floats per piece: x, y, vx, vy, size, life, span, drag, turn, spin, id, kind (0 stone, 1 powder)
 const NONE = 9;  // "don't draw this channel"
 
 // A stroke for the carve map. keep / open are how much is taken off the cone
@@ -51,55 +58,91 @@ function mulberry(seed: number) {
   };
 }
 
+// Smooth tileable noise: several grids of random values, each finer than the last.
+function fbmField(size: number, rnd: () => number, cells: number[], weights: number[]) {
+  const layer = new Float32Array(size * size);
+  cells.forEach((n, o) => {
+    const grid = new Float32Array(n * n);
+    for (let i = 0; i < grid.length; i++) grid[i] = rnd();
+    const w = weights[o];
+    for (let y = 0; y < size; y++) {
+      const fy = (y / size) * n, y0 = Math.floor(fy), ty = fy - y0;
+      const sy = ty * ty * (3 - 2 * ty), ya = (y0 % n) * n, yb = ((y0 + 1) % n) * n;
+      for (let x = 0; x < size; x++) {
+        const fx = (x / size) * n, x0 = Math.floor(fx), tx = fx - x0;
+        const sx = tx * tx * (3 - 2 * tx), xa = x0 % n, xb = (x0 + 1) % n;
+        const top = grid[ya + xa] + (grid[ya + xb] - grid[ya + xa]) * sx;
+        const bot = grid[yb + xa] + (grid[yb + xb] - grid[yb + xa]) * sx;
+        layer[y * size + x] += (top + (bot - top) * sy) * w;
+      }
+    }
+  });
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i < layer.length; i++) { if (layer[i] < lo) lo = layer[i]; if (layer[i] > hi) hi = layer[i]; }
+  for (let i = 0; i < layer.length; i++) layer[i] = (layer[i] - lo) / (hi - lo);
+  return layer;
+}
+function pack(size: number, channels: (Float32Array | ((i: number) => number))[]) {
+  const out = new Uint8Array(size * size * 4);
+  channels.forEach((ch, c) => {
+    for (let i = 0; i < size * size; i++) out[i * 4 + c] = Math.round(Math.min(1, Math.max(0, typeof ch === "function" ? ch(i) : ch[i])) * 255);
+  });
+  return out;
+}
+// Scattered holes of uneven size, tileable. Each is 1 at its centre.
+function holesField(size: number, rnd: () => number, count: number, radius: () => number, hard: number) {
+  const layer = new Float32Array(size * size);
+  for (let k = 0; k < count; k++) {
+    const cx = rnd() * size, cy = rnd() * size, rad = radius(), amp = 0.55 + rnd() * 0.45;
+    const squash = 0.7 + rnd() * 0.6, th = rnd() * Math.PI, co = Math.cos(th), si = Math.sin(th);
+    const reach = Math.ceil(rad * 2.5), x0 = Math.floor(cx), y0 = Math.floor(cy);
+    for (let dy = -reach; dy <= reach; dy++) for (let dx = -reach; dx <= reach; dx++) {
+      const px = x0 + dx - cx, py = y0 + dy - cy;
+      const u = (px * co + py * si) / (rad * squash), v = (-px * si + py * co) / (rad / squash);
+      // hard = 0: a soft dimple; higher: a hole with a floor and a definite rim
+      const val = hard ? amp * Math.min(1, Math.max(0, (1 - Math.hypot(u, v)) * hard)) : amp * Math.exp(-(u * u + v * v));
+      const i = ((((y0 + dy) % size) + size) % size) * size + ((((x0 + dx) % size) + size) % size);
+      if (val > layer[i]) layer[i] = val;
+    }
+  }
+  return layer;
+}
+
 // Tileable noise for the stone, made once: r grain, g mottle, b pits, a second grain.
 function stoneNoise(size: number) {
   const rnd = mulberry(20261115);
-  const out = new Uint8Array(size * size * 4);
-  const layer = new Float32Array(size * size);
-  const fbm = (cells: number[], weights: number[]) => {
-    layer.fill(0);
-    cells.forEach((n, o) => {
-      const grid = new Float32Array(n * n);
-      for (let i = 0; i < grid.length; i++) grid[i] = rnd();
-      const w = weights[o];
-      for (let y = 0; y < size; y++) {
-        const fy = (y / size) * n, y0 = Math.floor(fy), ty = fy - y0;
-        const sy = ty * ty * (3 - 2 * ty), ya = (y0 % n) * n, yb = ((y0 + 1) % n) * n;
-        for (let x = 0; x < size; x++) {
-          const fx = (x / size) * n, x0 = Math.floor(fx), tx = fx - x0;
-          const sx = tx * tx * (3 - 2 * tx), xa = x0 % n, xb = (x0 + 1) % n;
-          const top = grid[ya + xa] + (grid[ya + xb] - grid[ya + xa]) * sx;
-          const bot = grid[yb + xa] + (grid[yb + xb] - grid[yb + xa]) * sx;
-          layer[y * size + x] += (top + (bot - top) * sy) * w;
-        }
-      }
-    });
-    let lo = Infinity, hi = -Infinity;
-    for (let i = 0; i < layer.length; i++) { if (layer[i] < lo) lo = layer[i]; if (layer[i] > hi) hi = layer[i]; }
-    return (i: number) => (layer[i] - lo) / (hi - lo);
-  };
-  const put = (ch: number, get: (i: number) => number) => {
-    for (let i = 0; i < size * size; i++) out[i * 4 + ch] = Math.round(get(i) * 255);
-  };
-  put(0, fbm([32, 64, 128, 256], [0.34, 0.30, 0.22, 0.14]));
-  put(1, fbm([3, 6, 12, 24, 48], [0.36, 0.26, 0.18, 0.12, 0.08]));
-  put(3, fbm([16, 40, 96, 200, 256], [0.26, 0.24, 0.22, 0.16, 0.12]));
-  // pits: scattered soft dots of uneven size
-  layer.fill(0);
-  for (let k = 0; k < 760; k++) {
-    const cx = rnd() * size, cy = rnd() * size, rad = 0.9 + rnd() * rnd() * 3.4, amp = 0.55 + rnd() * 0.45;
-    const reach = Math.ceil(rad * 2.5);
-    for (let dy = -reach; dy <= reach; dy++) for (let dx = -reach; dx <= reach; dx++) {
-      const x = (((Math.floor(cx) + dx) % size) + size) % size, y = (((Math.floor(cy) + dy) % size) + size) % size;
-      const v = amp * Math.exp(-(dx * dx + dy * dy) / (rad * rad));
-      if (v > layer[y * size + x]) layer[y * size + x] = v;
-    }
-  }
-  put(2, (i) => Math.min(1, layer[i]));
-  return out;
+  const grain = fbmField(size, rnd, [32, 64, 128, 256], [0.34, 0.30, 0.22, 0.14]);
+  const mottle = fbmField(size, rnd, [3, 6, 12, 24, 48], [0.36, 0.26, 0.18, 0.12, 0.08]);
+  const grain2 = fbmField(size, rnd, [16, 40, 96, 200, 256], [0.26, 0.24, 0.22, 0.16, 0.12]);
+  const pits = holesField(size, rnd, 760, () => 0.9 + rnd() * rnd() * 3.4, 0);
+  return pack(size, [grain, mottle, pits, grain2]);
 }
 
-export function mountStone(root: HTMLElement): StoneHandle | null {
+// A second tileable texture, for what makes it rock rather than paper:
+// r holes (a few large, many small), g cells (0 at a cell's border, 1 at its
+// heart), b each cell's own random number.
+function rockNoise(size: number) {
+  const rnd = mulberry(4401);
+  const holes = holesField(size, rnd, 2600, () => 0.7 + Math.pow(rnd(), 3) * 3.5, 1.3);
+  const G = 40, cell = size / G;
+  const sx = new Float32Array(G * G), sy = new Float32Array(G * G), id = new Float32Array(G * G);
+  for (let i = 0; i < G * G; i++) { sx[i] = ((i % G) + rnd()) * cell; sy[i] = (Math.floor(i / G) + rnd()) * cell; id[i] = rnd(); }
+  const border = new Float32Array(size * size), own = new Float32Array(size * size);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const gx = Math.floor(x / cell), gy = Math.floor(y / cell);
+    let d1 = 1e9, d2 = 1e9, who = 0;
+    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+      const cx = gx + ox, cy = gy + oy, wx = ((cx % G) + G) % G, wy = ((cy % G) + G) % G, k = wy * G + wx;
+      const d = Math.hypot(sx[k] + (cx - wx) * cell - x, sy[k] + (cy - wy) * cell - y);
+      if (d < d1) { d2 = d1; d1 = d; who = id[k]; } else if (d < d2) d2 = d;
+    }
+    border[y * size + x] = (d2 - d1) / (cell * 0.6);
+    own[y * size + x] = who;
+  }
+  return pack(size, [holes, border, own]);
+}
+
+export function mountStone(root: HTMLElement, options: StoneOptions = {}): StoneHandle | null {
   const canvas = root.querySelector<HTMLCanvasElement>("[data-stone-canvas]");
   const hint = root.querySelector<HTMLElement>("[data-stone-hint]");
   const soundBtn = root.querySelector<HTMLButtonElement>("[data-stone-sound]");
@@ -110,7 +153,10 @@ export function mountStone(root: HTMLElement): StoneHandle | null {
 
   const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const coarse = window.matchMedia("(pointer: coarse)").matches;
-  const audio = createStoneAudio();
+  const lightScheme = window.matchMedia("(prefers-color-scheme: light)");
+  const audio = createStoneAudio(options.rollUrl);
+  // Limestone in light mode, andesite in dark. data-theme on the root overrides the system setting.
+  const isLight = () => (root.dataset.theme ? root.dataset.theme === "light" : lightScheme.matches);
 
   // ------------------------------------------------------------ GL plumbing
   function program(vs: string, fs: string) {
@@ -160,7 +206,7 @@ export function mountStone(root: HTMLElement): StoneHandle | null {
   type Prog = ReturnType<typeof program>;
   let pStone: Prog, pBlur: Prog, pPack: Prog, pBrush: Prog, pDecay: Prog, pGrit: Prog;
   let quad: WebGLVertexArrayObject, gritVao: WebGLVertexArrayObject, gritBuf: WebGLBuffer;
-  let noiseTex: WebGLTexture;
+  let noiseTex: WebGLTexture, rockTex: WebGLTexture;
   let wordTex: WebGLTexture | null = null;
   let carveTex: WebGLTexture | null = null, carveFbo: WebGLFramebuffer | null = null;
 
@@ -183,14 +229,15 @@ export function mountStone(root: HTMLElement): StoneHandle | null {
     gl.bindVertexArray(gritVao);
     gritBuf = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, gritBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, MAX_CHIPS * 24, gl.DYNAMIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, MAX_CHIPS * 28, gl.DYNAMIC_DRAW);
     gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 24, 0);
+    gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 28, 0);
     gl.enableVertexAttribArray(1);
-    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 24, 16);
+    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 28, 16);
     gl.bindVertexArray(null);
 
     noiseTex = texture(512, 512, true, stoneNoise(512), true);
+    rockTex = texture(512, 512, true, rockNoise(512), true);
   }
 
   // ------------------------------------------------------------ layout
@@ -202,7 +249,7 @@ export function mountStone(root: HTMLElement): StoneHandle | null {
     if (w === L.w && h === L.h && wordTex) return;
     L.w = w; L.h = h;
     let dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const budget = 3.4e6;
+    const budget = 2.8e6; // pixels drawn per frame: the stone's shading is not cheap
     if (w * h * dpr * dpr > budget) dpr = Math.sqrt(budget / (w * h));
     L.dpr = dpr;
     canvas!.width = Math.round(w * dpr);
@@ -377,29 +424,44 @@ export function mountStone(root: HTMLElement): StoneHandle | null {
     }
   }
 
-  // ------------------------------------------------------------ chips
+  // ------------------------------------------------------------ debris
   const chips = new Float32Array(MAX_CHIPS * CHIP);
-  const chipOut = new Float32Array(MAX_CHIPS * 6);
+  const chipOut = new Float32Array(MAX_CHIPS * 7);
   let chipNext = 0;
   const gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) * 1.15;
-  // Thrown ahead of the hand, not all round it: most fall short and sink back
-  // at once, a few skitter a long way.
+  // Broken stone thrown ahead of the hand, not all round it: mostly grit, some
+  // chips, the odd pebble, and a little powder. Pieces shoot out, tumble, and
+  // come to rest on the slab for a moment; most fall short, a few skitter far.
   function throwChips(x: number, y: number, ux: number, uy: number, speed: number, count: number, spread: number) {
     if (still) return;
-    const heading = Math.atan2(uy, ux);
+    const heading = Math.atan2(uy, ux), big = Math.max(0.8, L.scale);
     for (let i = 0; i < count; i++) {
       const o = chipNext * CHIP; chipNext = (chipNext + 1) % MAX_CHIPS;
-      const ang = heading + gauss() * spread;
+      const roll = Math.random();
+      const powder = roll < 0.10;
+      const ang = heading + gauss() * spread * (powder ? 0.6 : 1);
       const far = Math.pow(Math.random(), 2.4);
-      const v = Math.min(1100, 26 + speed * (0.22 + 1.5 * far) + Math.random() * 40);
       const side = (Math.random() * 2 - 1) * L.r, ahead = (0.2 + Math.random() * 0.9) * L.r;
       chips[o] = x + ux * ahead - uy * side; chips[o + 1] = y + uy * ahead + ux * side;
+      let v: number;
+      if (powder) {
+        v = 20 + speed * 0.12 * Math.random();
+        chips[o + 4] = (7 + Math.random() * 10) * big;
+        chips[o + 6] = 0.45 + Math.random() * 0.6;
+        chips[o + 7] = 2.5;
+      } else {
+        // grit under 2 px, chips to 5, pebbles to 9: the bigger the piece, the shorter it flies
+        const size = roll < 0.62 ? 0.8 + Math.random() * 1.1 : roll < 0.94 ? 1.9 + Math.random() * 3 : 5 + Math.random() * 4;
+        v = Math.min(1300, (40 + speed * (0.3 + 1.7 * far) + Math.random() * 60) * (1.25 - size * 0.08));
+        chips[o + 4] = size * big;
+        chips[o + 6] = 0.5 + Math.random() * 1.2 + size * 0.12 + far * 0.3;
+        chips[o + 7] = 5 + Math.random() * 6;
+      }
       chips[o + 2] = Math.cos(ang) * v; chips[o + 3] = Math.sin(ang) * v;
-      chips[o + 4] = (1.7 + 4.6 * Math.pow(Math.random(), 2.4)) * Math.max(0.8, L.scale);
-      chips[o + 6] = 0.16 + 1.5 * Math.pow(Math.random(), 2.6) + far * 0.35; chips[o + 5] = chips[o + 6];
-      chips[o + 7] = 2.6 + Math.random() * 6.5;
-      chips[o + 8] = Math.random() * 6.283; chips[o + 9] = (Math.random() - 0.5) * 0.06;
+      chips[o + 5] = chips[o + 6];
+      chips[o + 8] = Math.random() * 6.283; chips[o + 9] = (Math.random() - 0.5) * 0.09;
       chips[o + 10] = Math.random();
+      chips[o + 11] = powder ? 1 : 0;
     }
   }
   function drawChips(dt: number) {
@@ -414,21 +476,27 @@ export function mountStone(root: HTMLElement): StoneHandle | null {
       const vx = chips[o + 2], vy = chips[o + 3];
       chips[o] += vx * dt - drift; chips[o + 1] += vy * dt;
       chips[o + 8] += chips[o + 9] * Math.hypot(vx, vy) * dt * 4; // they tumble only while they travel
-      const life = Math.max(0, chips[o + 5] / chips[o + 6]);
-      const q = n * 6;
+      const left = Math.max(0, chips[o + 5]), spent = 1 - left / chips[o + 6];
+      const q = n * 7;
       chipOut[q] = chips[o]; chipOut[q + 1] = chips[o + 1];
-      chipOut[q + 2] = chips[o + 4] * Math.min(1, 0.35 + life * 2.2);       // sinks back into the slab
-      chipOut[q + 3] = Math.min(1, life * 3.2) * Math.min(1, (1 - life) * 14 + 0.3);
-      chipOut[q + 4] = chips[o + 8]; chipOut[q + 5] = chips[o + 10];
+      if (chips[o + 11]) {
+        chipOut[q + 2] = chips[o + 4] * (0.6 + 1.3 * spent);                 // powder spreads as it thins
+        chipOut[q + 3] = 0.22 * Math.min(1, spent / 0.12) * Math.pow(1 - spent, 1.3);
+      } else {
+        chipOut[q + 2] = chips[o + 4];                                        // stone keeps its size; it lies there, then is gone
+        chipOut[q + 3] = Math.min(1, left / 0.35);
+      }
+      chipOut[q + 4] = chips[o + 8]; chipOut[q + 5] = chips[o + 10]; chipOut[q + 6] = chips[o + 11];
       n++;
     }
     if (!n) return;
     gl.useProgram(pGrit.p);
     gl.bindVertexArray(gritVao);
     gl.bindBuffer(gl.ARRAY_BUFFER, gritBuf);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, chipOut, 0, n * 6);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, chipOut, 0, n * 7);
     gl.uniform2f(pGrit.u.u_res, L.w, L.h);
     gl.uniform1f(pGrit.u.u_dpr, L.dpr);
+    gl.uniform1f(pGrit.u.u_light, isLight() ? 1 : 0);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.drawArrays(gl.POINTS, 0, n);
@@ -436,7 +504,7 @@ export function mountStone(root: HTMLElement): StoneHandle | null {
   }
 
   // ------------------------------------------------------------ the hand
-  const hand = { x: 0, y: 0, known: false, down: false, mouse: true, sx: 0, sy: 0, dirX: 1, dirY: 0, speed: 0, lastMove: 0, sinceTing: 0, fresh: true };
+  const hand = { x: 0, y: 0, known: false, down: false, mouse: true, sx: 0, sy: 0, dirX: 1, dirY: 0, speed: 0, lastMove: 0, sinceTok: 0, fresh: true };
   const pill = { x: 0, y: 0, placed: false };
   let armed = false; // nothing answers the hand until the first click
   const driftSpeed = () => (still ? 0 : L.tile / DRIFT_SECONDS);
@@ -479,14 +547,14 @@ export function mountStone(root: HTMLElement): StoneHandle | null {
       hand.fresh = false;
       if (hand.down) {
         ops.push({ ax: hand.sx, ay: hand.sy, bx: sx, by: sy, keep: [0, 0], open: [NONE, NONE] });
-        hand.sinceTing += dist;
-        if (hand.sinceTing > 130) { hand.sinceTing = 0; audio.strike(0.26 + Math.random() * 0.1); }
+        hand.sinceTok += dist;
+        if (hand.sinceTok > 110) { hand.sinceTok = 0; audio.strike(0.42 + Math.random() * 0.16); }
       }
       const len = Math.hypot(hand.dirX, hand.dirY) || 1;
-      const share = (hand.down ? 0.34 : 0.2) * (0.35 + Math.min(1, inst / 900));
+      const share = (hand.down ? 0.5 : 0.32) * (0.35 + Math.min(1, inst / 900));
       let count = Math.floor(dist * share);
       if (Math.random() < dist * share - count) count++;
-      throwChips(x, y, hand.dirX / len, hand.dirY / len, inst, Math.min(count, 12), 0.42);
+      throwChips(x, y, hand.dirX / len, hand.dirY / len, inst, Math.min(count, 16), 0.42);
     }
     hand.x = x; hand.y = y; hand.sx = sx; hand.sy = sy; hand.lastMove = nowMs;
   }
@@ -498,7 +566,7 @@ export function mountStone(root: HTMLElement): StoneHandle | null {
     hand.mouse = e.pointerType === "mouse";
     const jumped = !hand.known || !hand.mouse;
     hand.known = true; hand.down = true; hand.x = x; hand.y = y; hand.sx = x + scroll; hand.sy = y;
-    hand.lastMove = performance.now(); hand.sinceTing = 0;
+    hand.lastMove = performance.now(); hand.sinceTok = 0;
     try { root.setPointerCapture(e.pointerId); } catch { /* not capturable; carving still works */ }
     const first = !armed;
     arm();
@@ -508,7 +576,7 @@ export function mountStone(root: HTMLElement): StoneHandle | null {
     setOpenStone(now);
     const len = Math.hypot(hand.dirX, hand.dirY) || 1;
     const moving = hand.speed > 60 && !first;
-    throwChips(x, y, hand.dirX / len, hand.dirY / len, moving ? Math.max(260, hand.speed) : 240, 18, moving ? 0.6 : 3.2);
+    throwChips(x, y, hand.dirX / len, hand.dirY / len, moving ? Math.max(260, hand.speed) : 240, 26, moving ? 0.6 : 3.2);
     audio.strike(1);
   }
   function onUp(e: PointerEvent) {
@@ -568,6 +636,11 @@ export function mountStone(root: HTMLElement): StoneHandle | null {
     bind(0, noiseTex, pStone.u.u_stone);
     bind(1, wordTex!, pStone.u.u_word);
     bind(2, carveTex!, pStone.u.u_carve);
+    bind(3, rockTex, pStone.u.u_rock);
+    const light = isLight();
+    gl.uniform1f(pStone.u.u_light, light ? 1 : 0);
+    gl.uniform1f(pStone.u.u_sway, still ? 0 : now % 4000);
+    if (root.dataset.tone !== (light ? "light" : "dark")) root.dataset.tone = light ? "light" : "dark";
     gl.uniform2f(pStone.u.u_res, L.w, L.h);
     gl.uniform1f(pStone.u.u_dpr, L.dpr);
     gl.uniform1f(pStone.u.u_scroll, scroll);
@@ -625,7 +698,7 @@ export function mountStone(root: HTMLElement): StoneHandle | null {
       canvas.removeEventListener("webglcontextlost", onLost);
       canvas.removeEventListener("webglcontextrestored", onRestored);
       audio.destroy();
-      delete root.dataset.live; delete root.dataset.hint; delete root.dataset.armed;
+      delete root.dataset.live; delete root.dataset.hint; delete root.dataset.armed; delete root.dataset.tone;
     },
   };
 }

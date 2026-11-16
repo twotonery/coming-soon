@@ -85,19 +85,22 @@ export const STONE_FRAG = `#version 300 es
 precision highp float;
 out vec4 o;
 uniform sampler2D u_stone; // tileable noise: r grain, g mottle, b pits, a second grain
+uniform sampler2D u_rock;  // tileable: r holes, g cell (0 at its border, 1 at its heart), b the cell's own number
 uniform sampler2D u_word;  // the logo band (see PACK_FRAG)
 uniform sampler2D u_carve; // r kept cuts, g stone held open (see BRUSH_FRAG)
 uniform vec2 u_res;        // viewport, CSS px
 uniform float u_dpr;
 uniform float u_scroll;    // slab drift, CSS px
 uniform float u_time;
+uniform float u_sway;      // time for the light's slow stir (held at 0 for reduced motion)
 uniform float u_tile;      // width of one logo tile
 uniform vec2 u_band;       // top and height of the logo band
 uniform float u_period;    // width of the carve map
 uniform float u_scale;     // 1 on a desktop-sized slab, smaller on phones
 uniform float u_edge;      // turns a cone into the same edge ramp the logo has
+uniform float u_light;     // 0 = andesite / lava stone (dark mode), 1 = limestone (light mode)
 
-const vec3 LIGHT = normalize(vec3(-0.50, -0.62, 0.60)); // from the upper left
+const vec3 SUN = normalize(vec3(-0.58, -0.50, 0.45)); // golden hour: low, from the upper left
 const float DEPTH = 11.0; // one depth for the logo and for every cut
 
 vec3 word(vec2 s) {
@@ -107,23 +110,39 @@ vec3 word(vec2 s) {
 vec4 carve(vec2 s) { return texture(u_carve, vec2(s.x / u_period, s.y / u_res.y)); }
 float ramp(float cone) { return clamp((cone - 0.5) * u_edge + 0.5, 0.0, 1.0); }
 
-// The hollows: the debossed logo and everything cut by the visitor go through
-// the same edge, the same wobble and the same depth, so they read as one hand.
-float relief(vec2 s, float wob, out float m, out vec4 c) {
+// The hollows: the logo and everything cut by the visitor go through the same
+// edge and the same depth, so they read as one hand. wob pushes the edge in
+// and out by a few px (it only acts near an edge): the wander of a hand-held
+// chisel, and bites where the stone chipped. deep varies how far down it went.
+float relief(vec2 s, float wob, float deep, out float m, out vec4 c) {
   vec3 w = word(s);
   c = carve(s);
-  m = smoothstep(0.26, 0.74, max(w.r, ramp(max(c.r, c.g))) + wob);
-  return -DEPTH * u_scale * m;
+  float v = max(w.r, ramp(max(c.r, c.g)));
+  m = smoothstep(0.36, 0.64, v + wob * 4.0 * v * (1.0 - v));
+  return -DEPTH * u_scale * deep * m;
 }
 
-// The small stuff: a fine honed grain, the odd pit, and where the stone is
-// being held open, the rubble pushed up along the gap and churning in it.
-float fine(vec2 s, float hollow, float berm, float churn) {
+// The stone's own surface: grit, the shallow facets left by dressing it by
+// hand, holes (many in lava stone, few in limestone), tool
+// tracks on the floors of the hollows, and rubble where it is being bent.
+float surface(vec2 s, float hollow, float berm, float churn, out float holes) {
   vec4 a = texture(u_stone, s / 300.0);
   vec4 b = texture(u_stone, s.yx / 131.0 + 0.37);
   vec4 f = texture(u_stone, s / 61.0 + 0.53);
-  float h = (f.r - 0.5) * 0.34 + (a.r - 0.5) * 0.30 + (b.a - 0.5) * 0.26;
-  h -= smoothstep(0.80, 0.98, a.b) * 0.9 * (1.0 - 0.5 * hollow);
+  vec4 k = texture(u_rock, s / 420.0);            // holes 1-5 px across
+  vec4 K = texture(u_rock, s.yx / 1150.0 + 0.19); // pocks up to ~30 px, facets ~28 px
+  float h = (f.r - 0.5) * 0.50 + (a.r - 0.5) * 0.40 + (b.a - 0.5) * 0.35;
+  h += (K.g * 0.6 + (K.b - 0.5) * 0.7 * smoothstep(0.0, 0.3, K.g)) * mix(1.0, 0.7, u_light);
+  h += (k.g - 0.5) * 0.25;
+  float fewer = 0.38 + 0.32 * u_light;
+  float small = max(k.r - fewer, 0.0) / (1.0 - fewer);
+  float pock = smoothstep(0.30 + 0.3 * u_light, 1.0, K.r); // the odd wide, shallow dent
+  holes = max(small, pock * 0.35);
+  h -= small * 2.0 + pock * 1.1 + smoothstep(0.80, 0.98, a.b) * 0.5;
+  if (hollow > 0.01) {
+    vec2 r = vec2(s.x * 0.80 + s.y * 0.60, -s.x * 0.60 + s.y * 0.80);
+    h += (textureLod(u_stone, r / vec2(1300.0, 150.0), 0.0).g - 0.5) * 2.6 * hollow;
+  }
   if (berm + churn > 0.003) {
     vec2 flow = vec2(u_time * 0.035, -u_time * 0.022);
     float loose = textureLod(u_stone, s / 210.0 + flow, 0.0).r + textureLod(u_stone, s / 97.0 - flow * 1.6, 0.0).a - 1.0;
@@ -133,6 +152,9 @@ float fine(vec2 s, float hollow, float berm, float churn) {
   return h;
 }
 
+// Keeps the brightest sunlit grains from burning out to flat white.
+vec3 shoulder(vec3 c) { return mix(c, 1.0 - 0.22 * exp(-(c - 0.78) / 0.22), step(0.78, c)); }
+
 void main() {
   vec2 p = vec2(gl_FragCoord.x, u_res.y * u_dpr - gl_FragCoord.y) / u_dpr;
   vec2 s = p + vec2(u_scroll, 0.0);
@@ -141,14 +163,19 @@ void main() {
   vec4 nA = texture(u_stone, s / 300.0);
   vec4 nB = texture(u_stone, s.yx / 131.0 + 0.37);
   vec4 nC = texture(u_stone, s / 1790.0 + 0.11);
-  vec4 nF = texture(u_stone, s / 61.0 + 0.53);
+  vec4 K = texture(u_rock, s.yx / 1150.0 + 0.19);
+  vec4 X = texture(u_rock, s / 150.0 + 0.3); // crystals and flecks, ~3 px
 
   // ---- relief and its slope
-  float wob = (nA.a - 0.5) * 0.10 + (nB.r - 0.5) * 0.07;
-  float m, mx, my; vec4 c, cx, cy;
-  float h0 = relief(s, wob, m, c);
-  float hx = relief(s + vec2(e, 0.0), wob, mx, cx);
-  float hy = relief(s + vec2(0.0, e), wob, my, cy);
+  // stone may chip well away from an edge, but only creeps a little into a
+  // hollow, so thin strokes and points survive
+  float wob = clamp((nB.g - 0.5) * 0.30 + (nA.a - 0.5) * 0.40 + (nB.r - 0.5) * 0.22
+                  + smoothstep(0.25, 0.85, K.r) * 0.35 + (0.55 - K.g) * 0.20, -0.30, 0.48);
+  float deep = 1.0 + (nC.r - 0.5) * 0.3;
+  float m, tm; vec4 c, tc;
+  float h0 = relief(s, wob, deep, m, c);
+  float hx = relief(s + vec2(e, 0.0), wob, deep, tm, tc);
+  float hy = relief(s + vec2(0.0, e), wob, deep, tm, tc);
   vec2 slope = vec2(hx - h0, hy - h0) / e;
 
   // ---- stone the hand is holding open: rubble banked along the gap, and a
@@ -159,64 +186,77 @@ void main() {
   float berm = smoothstep(0.24, 0.47, c.g) * (1.0 - smoothstep(0.47, 0.56, c.g)) * (1.0 - m);
   float churn = held * m;
 
-  float f0 = fine(s, m, berm, churn);
-  float fx = fine(s + vec2(e, 0.0), m, berm, churn);
-  float fy = fine(s + vec2(0.0, e), m, berm, churn);
+  float holes, th;
+  float f0 = surface(s, m, berm, churn, holes);
+  float fx = surface(s + vec2(e, 0.0), m, berm, churn, th);
+  float fy = surface(s + vec2(0.0, e), m, berm, churn, th);
   slope += vec2(fx - f0, fy - f0) / e;
-  float swell = (nC.g - 0.5) * 5.0;
-  slope += vec2(dFdx(swell), dFdy(swell)) * u_dpr;
+  float swell = (nC.g - 0.5) * 7.0;
+  slope += vec2(dFdx(swell), -dFdy(swell)) * u_dpr;
 
   vec3 n = normalize(vec3(-slope, 1.0));
-  float lit = max(dot(n, LIGHT), 0.0) / LIGHT.z;
+  float ndl = max(dot(n, SUN), 0.0) / SUN.z;
+  ndl = ndl < 1.0 ? ndl : 1.0 + (ndl - 1.0) * 0.5;
 
-  // ---- shadow thrown into the hollows by the walls on the light's side
-  vec2 toLight = normalize(LIGHT.xy);
-  float sh = 0.0, tm; vec4 tc;
-  float d1 = 6.0 * u_scale, d2 = 15.0 * u_scale;
-  float ha = relief(s + toLight * d1, wob, tm, tc);
-  float hb = relief(s + toLight * d2, wob, tm, tc);
-  sh += smoothstep(0.0, 1.0, (ha - h0 - d1 * 0.55) / 3.0) * 0.6;
-  sh += smoothstep(0.0, 1.0, (hb - h0 - d2 * 0.55) / 3.0) * 0.4;
-  // close shade where a hollow floor meets its walls
+  // ---- long evening shadows thrown into the hollows by their sunward walls
+  vec2 toSun = normalize(SUN.xy);
+  float rise = SUN.z / length(SUN.xy);
+  float lit = 1.0;
+  for (int i = 0; i < 3; i++) {
+    float d = (i == 0 ? 5.0 : i == 1 ? 11.0 : 19.0) * u_scale;
+    float hd = relief(s + toSun * d, wob, deep, tm, tc);
+    lit *= 1.0 - smoothstep(0.0, 1.0, (hd - h0 - d * rise) / 2.5) * (0.8 - 0.08 * float(i));
+  }
+  // close shade where a hollow's floor meets its walls
   float wide = max(w0.g, max(c.r, c.g));
-  float ao = m * (1.0 - smoothstep(0.55, 1.0, wide)) * 0.30;
+  float ao = m * (1.0 - smoothstep(0.55, 1.0, wide)) * 0.30 + holes * 0.32;
 
-  // ---- colour
+  // ---- the sun: a pool of low light over the middle of the slab, its edge
+  // broken and gently stirred as if by leaves overhead
   vec2 q = p / u_res;
-  vec3 base = vec3(0.262, 0.428, 0.438);
-  // the light pools toward the upper right, as in the design
-  base *= 0.93 + 0.34 * clamp(q.x * 0.45 + (1.0 - q.y) * 0.72 - 0.25, 0.0, 1.0);
-  base *= 1.0 + (nC.g - 0.5) * 0.16 + (nB.g - 0.5) * 0.06 + (nA.r - 0.5) * 0.03;
-  base = mix(base, base.grb * vec3(0.96, 0.99, 1.0), (nC.a - 0.5) * 0.08 + 0.04); // faint mineral drift in hue
-  base = mix(base, base * vec3(0.90, 0.95, 0.96), m * 0.55);                      // hollows sit a shade deeper
-  base *= 1.0 - smoothstep(0.80, 0.98, nA.b) * 0.08;                               // pits
-  base += vec3(0.05, 0.06, 0.06) * smoothstep(0.86, 0.98, nF.a) * (0.4 + 0.6 * nB.r); // pale flecks
-  // freshly broken stone is a little paler
-  base = mix(base, vec3(0.50, 0.63, 0.63), berm * 0.10 + churn * 0.03);
+  float rag = texture(u_stone, p / 1500.0 + vec2(u_sway * 0.004, 0.0)).g - 0.5;
+  float pool = 1.0 - smoothstep(0.40, 1.05, length((q - vec2(0.5, 0.56)) / vec2(0.70, 0.60)) + rag * 0.35);
+  float leaf = texture(u_stone, p / 620.0 + vec2(u_sway * 0.007, u_sway * 0.004)).g
+             + (texture(u_stone, p / 260.0 - vec2(u_sway * 0.009, 0.0)).g - 0.5) * 0.5;
+  float sunny = clamp(pool + (smoothstep(0.30, 0.70, leaf) - 0.5) * pool * (1.0 - pool) * 2.2, 0.0, 1.0);
+  sunny = mix(mix(0.13, 0.34, u_light), 1.0, sunny);
 
-  vec3 col = base * (0.30 + 0.70 * lit);
-  col *= 1.0 - sh * 0.50;
-  col *= 1.0 - ao;
-  // a dry, matte catch of light on edges that face the lamp
-  vec3 hv = normalize(LIGHT + vec3(0.0, 0.0, 1.0));
-  col += vec3(0.75, 0.85, 0.85) * pow(max(dot(n, hv), 0.0), 18.0) * 0.045;
+  // ---- the stone's colour
+  vec3 alb = mix(vec3(0.268, 0.280, 0.298), vec3(0.790, 0.745, 0.655), u_light);
+  alb *= 1.0 + ((nC.g - 0.5) * 0.30 + (nB.g - 0.5) * 0.14 + (nA.r - 0.5) * 0.08) * mix(1.0, 0.55, u_light);
+  // crystals in the andesite; shell and grit in the limestone
+  float inCell = smoothstep(0.15, 0.5, X.g);
+  alb = mix(alb, mix(vec3(0.56, 0.55, 0.53), vec3(0.93, 0.90, 0.83), u_light), step(0.93, X.b) * inCell * mix(0.6, 0.5, u_light));
+  alb = mix(alb, mix(vec3(0.10, 0.10, 0.105), vec3(0.58, 0.48, 0.36), u_light), step(X.b, 0.07) * inCell * 0.6);
+  // limestone is laid down in beds
+  alb *= 1.0 + (texture(u_stone, vec2(s.x / 2600.0, s.y / 240.0)).g - 0.5) * 0.10 * u_light;
+  // weathering: moss creeping over the andesite, ochre staining the limestone
+  float stain = smoothstep(0.52, 0.80, nC.a) * (0.5 + 0.5 * nB.g);
+  alb = mix(alb, mix(vec3(0.23, 0.27, 0.18), vec3(0.74, 0.60, 0.40), u_light), stain * mix(0.30, 0.22, u_light));
+  alb *= 1.0 - holes * 0.45;                                 // holes are dark inside
+  alb *= mix(1.0, 0.86, m);                                  // the hollows hold more grime
+  alb = mix(alb, alb * 1.5 + 0.03, berm * 0.25 + churn * 0.08); // freshly broken stone is paler
 
-  // edge falloff and a breath of dither against banding
-  vec2 vq = q - 0.5;
-  col *= 1.0 - dot(vq, vq) * 0.22;
+  // ---- light: warm sun, cool sky in the shade
+  vec3 sunC = mix(vec3(1.00, 0.86, 0.68) * 1.22, vec3(1.00, 0.83, 0.62) * 0.72, u_light);
+  vec3 skyC = vec3(0.66, 0.72, 0.84) * mix(0.50, 0.72, u_light);
+  vec3 col = alb * (skyC * (1.0 - ao) * (0.75 + 0.25 * n.z) + sunC * ndl * sunny * lit);
+  col += alb * sunC * 0.10 * sunny * m; // sun bounced around inside a hollow, so its shade is not dead
+  col = shoulder(col);
+
   col += (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) / 255.0;
   o = vec4(col, 1.0);
 }`;
 
-// Chips of stone thrown ahead of the hand. Each is a small angular flake, lit
-// from the same side as the slab, with a short shadow under it.
+// Debris thrown ahead of the hand: angular chips and pebbles of the slab's own
+// stone (kind 0), and puffs of powder (kind 1).
 export const GRIT_VERT = `#version 300 es
 in vec4 a_grit; // x, y, size, alpha
-in vec2 a_look; // turn, tone
+in vec3 a_look; // turn, the piece's own number, kind
 uniform vec2 u_res;
 uniform float u_dpr;
 out float v_alpha;
-out vec2 v_look;
+out vec3 v_look;
 void main() {
   v_alpha = a_grit.w;
   v_look = a_look;
@@ -227,21 +267,43 @@ void main() {
 export const GRIT_FRAG = `#version 300 es
 precision highp float;
 in float v_alpha;
-in vec2 v_look;
+in vec3 v_look;
+uniform float u_light;
 out vec4 o;
-float flake(vec2 p, float turn) {
-  float c = cos(turn), s = sin(turn);
-  p = vec2(c * p.x - s * p.y, s * p.x + c * p.y);
-  // a lopsided four-sided chip
-  return max(abs(p.x) * 1.15 + p.y * 0.35, abs(p.y) * 1.5 - p.x * 0.25);
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+// A broken piece of stone seen from above: a convex shape left by five uneven
+// cuts. Returns how far inside its outline p is (negative inside) and, in
+// face, how squarely the nearest face is turned to the sun.
+float piece(vec2 p, float turn, float id, out float face) {
+  float d = -9.0;
+  face = 0.0;
+  for (int i = 0; i < 5; i++) {
+    float fi = float(i);
+    float ang = turn + fi * 1.2566 + (hash(vec2(id, fi)) - 0.5) * 0.9;
+    vec2 nrm = vec2(cos(ang), sin(ang));
+    float di = dot(p, nrm) - (0.40 + 0.30 * hash(vec2(fi, id * 7.0)));
+    if (di > d) { d = di; face = dot(nrm, vec2(-0.76, -0.65)); }
+  }
+  return d;
 }
 void main() {
-  vec2 p = (gl_PointCoord - 0.5) * 2.6; // the chip fills about 0.4 of its sprite; the rest holds its shadow
-  float body = 1.0 - smoothstep(0.52, 0.72, flake(p, v_look.x));
-  float shade = (1.0 - smoothstep(0.45, 0.85, flake(p - vec2(0.22, 0.27), v_look.x))) * 0.42;
-  // lit on the upper left, in the slab's own colours
-  float lit = clamp(0.55 - dot(p, vec2(0.50, 0.62)) * 0.9, 0.0, 1.0);
-  vec3 col = mix(vec3(0.20, 0.34, 0.35), vec3(0.52, 0.67, 0.67), lit) * (0.85 + 0.3 * v_look.y);
-  float a = max(body, shade * (1.0 - body)) * v_alpha;
-  o = vec4(col * body * v_alpha, a);
+  vec2 p = (gl_PointCoord - 0.5) * 2.6;
+  if (v_look.z > 0.5) {
+    // powder: a soft heap of separate grains, not a mist
+    float a = 1.0 - smoothstep(0.0, 1.25, length(p));
+    a *= a * (0.35 + 1.3 * hash(floor(gl_FragCoord.xy) + v_look.y * 91.0));
+    vec3 dust = mix(vec3(0.60, 0.56, 0.50), vec3(1.00, 0.95, 0.84), u_light);
+    o = vec4(dust * a * v_alpha, a * v_alpha);
+    return;
+  }
+  float face, unused;
+  float d = piece(p, v_look.x, v_look.y, face);
+  float body = 1.0 - smoothstep(-0.07, 0.05, d);
+  float shade = (1.0 - smoothstep(-0.10, 0.22, piece(p - vec2(0.24, 0.21), v_look.x, v_look.y, unused))) * 0.5 * (1.0 - body);
+  // a flat top; toward the rim each broken face catches the low sun or turns from it
+  float rim = smoothstep(-0.42, 0.0, d);
+  float lit = 0.66 + face * 0.42 * rim + (hash(floor(p * 5.0) + v_look.y * 31.0) - 0.5) * 0.24;
+  vec3 rock = mix(vec3(0.36, 0.35, 0.34), vec3(0.93, 0.87, 0.75), u_light) * (0.8 + 0.4 * fract(v_look.y * 13.7));
+  vec3 col = rock * lit * mix(vec3(1.04, 0.98, 0.90), vec3(1.08, 0.96, 0.82), u_light); // a little of the evening sun
+  o = vec4(col * body * v_alpha, max(body, shade) * v_alpha);
 }`;
