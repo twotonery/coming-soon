@@ -808,7 +808,7 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
   }
   function onDown(e: PointerEvent) {
     if (e.button !== 0) return;
-    if ((e.target as HTMLElement).closest("button")) return;
+    if ((e.target as HTMLElement).closest("button, a")) return; // the page's own controls are not the stone
     const [x, y] = local(e);
     hand.mouse = e.pointerType === "mouse";
     if (!hand.known || !hand.mouse) hand.fresh = true;

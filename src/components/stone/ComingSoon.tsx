@@ -1,7 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { clockText } from "./clock";
 import { mountStone } from "./engine";
 
 // The coming-soon page: the footer's debossed wordmark as a slab of stone the
@@ -19,8 +20,19 @@ export function ComingSoon() {
     return () => stone?.destroy();
   }, []);
 
+  // Sunlit is the limestone, Sunset the teal stone (engine.ts reads data-stone).
+  const [sunset, setSunset] = useState(false);
+  // The clock is filled in once the page is running, since only the browser knows the visitor's time.
+  const [clock, setClock] = useState("");
+  useEffect(() => {
+    const tick = () => setClock(clockText(new Date()));
+    tick();
+    const timer = window.setInterval(tick, 5000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   return (
-    <main ref={root} className="stone fixed inset-0 touch-none overflow-hidden select-none">
+    <main ref={root} data-stone={sunset ? "teal" : undefined} className="stone fixed inset-0 touch-none overflow-hidden select-none">
       <div aria-hidden className="absolute inset-x-0 top-[43.7%] h-[160px] -translate-y-1/2 mix-blend-luminosity sm:h-[260px] lg:h-[392px]">
         <Image src="/figma/footer-wordmark.png" alt="" fill sizes="100vw" className="object-cover" />
       </div>
@@ -32,7 +44,24 @@ export function ComingSoon() {
         <br />
         Coming soon December 2026.
       </p>
+      <p className="stone-talk">
+        Like what you see?{" "}
+        <a href="https://cal.com/twotonerydesign/15min" target="_blank" rel="noopener noreferrer">
+          Let&rsquo;s talk.
+        </a>
+      </p>
+      <p className="stone-clock">{clock}</p>
       <p className="stone-copy">© Twotonery 2026. All right reserved.</p>
+
+      <div className="stone-switch" role="group" aria-label="Light">
+        <button type="button" aria-pressed={sunset} onClick={() => setSunset(true)}>
+          Sunset
+        </button>
+        <span aria-hidden>–</span>
+        <button type="button" aria-pressed={!sunset} onClick={() => setSunset(false)}>
+          Sunlit
+        </button>
+      </div>
 
       <button type="button" data-stone-sound aria-pressed="true" aria-label="Sound effects" className="stone-sound">
         <svg aria-hidden viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
