@@ -20,8 +20,9 @@ export function ComingSoon() {
     return () => stone?.destroy();
   }, []);
 
-  // Sunlit is the limestone, Sunset the teal stone (engine.ts reads data-stone).
-  const [sunset, setSunset] = useState(false);
+  // Sunset is the teal stone, and what the page opens on; Sunlit is the limestone
+  // (engine.ts reads data-stone).
+  const [sunset, setSunset] = useState(true);
   // The clock is filled in once the page is running, since only the browser knows the visitor's time.
   const [clock, setClock] = useState("");
   useEffect(() => {
@@ -40,17 +41,17 @@ export function ComingSoon() {
 
       <h1 className="sr-only">Twotonery</h1>
       <p className="stone-tag">
-        Thoughtful design for what comes next.
+        <strong>Thoughtful design for what comes next.</strong>
         <br />
         Coming soon December 2026.
       </p>
       <p className="stone-talk">
-        Like what you see?{" "}
-        <a href="https://cal.com/twotonerydesign/15min" target="_blank" rel="noopener noreferrer">
+        <span>Like what you see?</span>
+        <a href="https://cal.com/twotonerydesign/15min" target="_blank" rel="noopener noreferrer" className="stone-glass">
           Let&rsquo;s talk.
         </a>
       </p>
-      <p className="stone-clock">{clock}</p>
+      <p className="stone-clock stone-glass">{clock}</p>
       <p className="stone-copy">© Twotonery 2026. All right reserved.</p>
 
       <div className="stone-switch" role="group" aria-label="Light">
@@ -73,7 +74,7 @@ export function ComingSoon() {
         <span className="stone-sound-off">Sound off</span>
       </button>
 
-      <div data-stone-hint aria-hidden className="stone-hint">
+      <div data-stone-hint aria-hidden className="stone-hint stone-glass">
         Click to carve
       </div>
     </main>
