@@ -13,7 +13,9 @@ export function ComingSoon() {
   const root = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!root.current) return;
-    const stone = mountStone(root.current, { rollUrl: "/sfx/stone-roll.mp3" });
+    const stone = mountStone(root.current, {
+      sounds: { carve: "/sfx/stone-roll.mp3", heal: "/sfx/stone-heal.mp3", idle: "/sfx/stone-idle.mp3" },
+    });
     return () => stone?.destroy();
   }, []);
 

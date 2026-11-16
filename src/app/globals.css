@@ -129,6 +129,16 @@ body { font-family: var(--font-sans), system-ui, sans-serif; }
   opacity: 1; transform: none; filter: none;
   transition: opacity .9s ease, transform 1.1s cubic-bezier(.16, 1, .3, 1), filter .9s ease;
 }
+/* The page's text arrives the way the pill does: out of a blur, rising a little. */
+@media (prefers-reduced-motion: no-preference) {
+  .stone-tag, .stone-copy, .stone-sound {
+    opacity: 0; filter: blur(6px); transform: translateY(8px) scale(.96);
+    animation: stone-arrive 1.1s cubic-bezier(.16, 1, .3, 1) .2s forwards;
+  }
+  .stone-copy { animation-delay: .4s; }
+  .stone-sound { animation-delay: .5s; }
+}
+@keyframes stone-arrive { to { opacity: 1; filter: none; transform: none; } }
 /* stone:end */
 
 @media (prefers-reduced-motion: reduce) {

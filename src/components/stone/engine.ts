@@ -5,14 +5,16 @@
 //   (default)  limestone in evening sun, with green and golden moss
 //   "teal"     the brand's teal stone at sunset, with orange and rose moss,
 //              dew on the moss, and the sunset caught on the stone's grain
-// Both have cracks with moss and small wall plants growing out of them, and
-// the shadows of branches (top, right, a little bottom left) swaying over them.
+// Both have fine cracks running in from the slab's edges and out from the logo,
+// with moss along them and mats of stonecrop, a little moss in the logo's own
+// shaded corners, and the shadows of branches (top, right, a little bottom
+// left) stirring over them.
 //
 // A click turns carving on, the next click turns it off. While it is on, the
 // cursor carves wherever it goes, at the logo's own stroke width, depth and
 // edge, throwing chips and dust ahead. Cuts last until the page is reloaded,
-// except across the logo, where the stone slowly closes again so the logo
-// always comes back.
+// except in the strip the logo runs along, where the stone slowly closes again
+// so the logo always comes back.
 //
 // It keeps a "carve map" the size of the slab (see BRUSH_FRAG). The slab drifts
 // sideways as an endless band, and the carve map, cracks, moss and plants all
@@ -22,14 +24,14 @@
 //   canvas[data-stone-canvas], [data-stone-hint], button[data-stone-sound]
 // and returns null when WebGL2 isn't there (the still image underneath stays).
 
-import { createStoneAudio } from "./audio";
+import { createStoneAudio, type StoneSounds } from "./audio";
 import { ICON_BOX, ICON_PATHS, WORD_BOX, WORD_PATHS } from "./logo";
 import { BLUR_FRAG, BRUSH_FRAG, BRUSH_VERT, DECAY_FRAG, GRIT_FRAG, GRIT_VERT, PACK_FRAG, QUAD_VERT, STONE_FRAG } from "./shaders";
 
 export type StoneHandle = { destroy(): void };
 export type StoneOptions = {
-  /** The hover sound: a URL (or data: URL) of the rocks-tumbling recording. */
-  rollUrl?: string;
+  /** URLs (or data: URLs) of the three rock recordings: see audio.ts. */
+  sounds?: StoneSounds;
 };
 
 // ---- the band's proportions, in logo units (logo.svg is 159 x 30)
@@ -43,7 +45,8 @@ const DRIFT_SECONDS = 95; // time for one tile to pass
 const STEM_UNITS = 3.4;   // the wordmark's stroke width: every cut is this wide
 const EDGE_SIGMA = 2.9;   // px over which a cut's edge can wander and chip (at scale 1)
 
-const HEAL_SECONDS = 3.5;  // how long a cut across the logo takes to close again
+const HEAL_SECONDS = 3.5;  // how long a cut across the logo's strip takes to close again
+const HEAL_MARGIN = 26;    // px beyond the logo, above and below, that also heal
 const HINT_DELAY = 500;
 const MAX_CHIPS = 640;
 const CHIP = 12; // floats per piece: x, y, vx, vy, size, life, span, drag, turn, spin, id, kind (0 stone, 1 powder)
@@ -53,23 +56,15 @@ type Op = { ax: number; ay: number; bx: number; by: number };
 // A plant, drawn once to a small canvas (with its silhouette, for its shadow).
 // ax, ay: where it is rooted, in the sprite. Sizes in CSS px.
 type Sprite = { img: HTMLCanvasElement; shade: HTMLCanvasElement; ax: number; ay: number; w: number; h: number };
-// One plant on the slab: x in stone space, growing along ang, swaying by amp.
-type Plant = { x: number; y: number; sprite: Sprite; ang: number; amp: number; phase: number; scale: number; layer: number };
+// One plant on the slab: x in stone space, turned by ang.
+type Plant = { x: number; y: number; sprite: Sprite; ang: number; scale: number };
 
-// What grows in the cracks. On limestone: ferns, yellow-green sprigs and
-// grey-green stonecrop. On the teal stone the ferns turn a cooler green and
-// the stonecrop flushes pink and orange, as it does in strong sun.
+// What grows along the cracks besides moss: stonecrop, in tight mats of small
+// rosettes. Mostly green; some flush pink and orange, as it does in strong sun
+// (more of them on the teal stone, where they echo the orange and rose moss).
 const FLORA = {
-  limestone: {
-    fern: ["#6a9a3c", "#7fae45", "#93bd55"], fernDark: "#3f6a2b", fernLight: "#c3df8c", stem: "#3a2f22",
-    sprig: ["#8fb84e", "#a6c965"], sprigDark: "#55803a",
-    crop: ["#8fb58d", "#a3c49c", "#7ea486"], cropTip: "#c79a8e", cropDark: "#4f6f58", shadow: "#2a1c08",
-  },
-  teal: {
-    fern: ["#3f9a6e", "#56ad7c", "#74c08a"], fernDark: "#1f5a48", fernLight: "#b5ecc0", stem: "#2a211c",
-    sprig: ["#63b07a", "#86c68c"], sprigDark: "#2f6b52",
-    crop: ["#e08f7c", "#eaa78f", "#d7748a"], cropTip: "#f8d0ae", cropDark: "#8a4a55", shadow: "#06181a",
-  },
+  limestone: { crop: ["#7f9f72", "#93b083", "#6f9068"], cropDark: "#3f5a44", cropTip: "#cbd8ae", flush: ["#b98f84", "#c9a08e"], flushTip: "#ead0ba", flushed: 0.12, shadow: "#2a1c08" },
+  teal: { crop: ["#3f7a58", "#56906a", "#2f6a4e"], cropDark: "#17392f", cropTip: "#a9d6a8", flush: ["#d9827a", "#e79a86", "#cf6f86"], flushTip: "#f6cfae", flushed: 0.28, shadow: "#06181a" },
 };
 
 function mulberry(seed: number) {
@@ -176,7 +171,7 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
 
   const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const coarse = window.matchMedia("(pointer: coarse)").matches;
-  const audio = createStoneAudio(options.rollUrl);
+  const audio = createStoneAudio(options.sounds);
   const teal = () => root.dataset.stone === "teal";
   // plants are drawn on their own canvas, over the stone and under the page's text
   const plants = document.createElement("canvas");
@@ -236,6 +231,7 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
   let noiseTex: WebGLTexture, rockTex: WebGLTexture;
   let decorTex: WebGLTexture | null = null, shadeTex: WebGLTexture | null = null;
   let flora: Plant[] = [];
+  let maskAt: (x: number, y: number) => boolean = () => false; // is this point of the slab inside the logo's shape?
   let floraTeal = false;
   let wordTex: WebGLTexture | null = null;
   let carveTex: WebGLTexture | null = null, carveFbo: WebGLFramebuffer | null = null;
@@ -331,9 +327,22 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     for (const d of ICON_PATHS) { const path = new Path2D(d); g.fill(path); g.stroke(path); }
     g.restore();
 
+    // a small copy to ask "is the logo here?" of, when laying out cracks and moss
+    const small = document.createElement("canvas");
+    small.width = Math.min(1024, tw); small.height = Math.max(1, Math.round((th * small.width) / tw));
+    const sg = small.getContext("2d", { willReadFrequently: true })!;
+    sg.drawImage(c, 0, 0, small.width, small.height);
+    const seen = sg.getImageData(0, 0, small.width, small.height).data, mw = small.width, mh = small.height;
+    maskAt = (x, y) => {
+      const v = (y - L.bandTop) / L.bandH;
+      if (v < 0 || v >= 1) return false;
+      const u = (((x % L.tile) + L.tile) % L.tile) / L.tile;
+      return seen[(Math.floor(v * mh) * mw + Math.floor(u * mw)) * 4] > 127;
+    };
+
     const sharp = texture(tw, th, true, c);
-    const tmp = texture(tw, th, true), tight = texture(tw, th, true), wide = texture(tw, th, true), zone = texture(tw, th, true);
-    const fTmp = target(tmp), fTight = target(tight), fWide = target(wide), fZone = target(zone);
+    const tmp = texture(tw, th, true), tight = texture(tw, th, true), wide = texture(tw, th, true);
+    const fTmp = target(tmp), fTight = target(tight), fWide = target(wide);
     gl.disable(gl.BLEND);
     gl.viewport(0, 0, tw, th);
     gl.bindVertexArray(quad);
@@ -348,19 +357,16 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     const sTight = EDGE_SIGMA * L.scale * k, sWide = 9 * L.scale * k;
     blur(sharp, fTmp, 1, 0, sTight); blur(tmp, fTight, 0, 1, sTight);
     blur(tight, fTmp, 1, 0, sWide); blur(tmp, fWide, 0, 1, sWide);
-    // a very wide copy: the logo's whole neighbourhood, counters and the inside of the mark included
-    const sZone = 24 * L.scale * k;
-    blur(sharp, fTmp, 1, 0, sZone); blur(tmp, fZone, 0, 1, sZone);
 
     if (wordTex) gl.deleteTexture(wordTex);
     wordTex = texture(tw, th, true);
     const fWord = target(wordTex);
     gl.useProgram(pPack.p);
-    bind(0, tight, pPack.u.u_tight); bind(1, wide, pPack.u.u_wide); bind(2, sharp, pPack.u.u_sharp); bind(3, zone, pPack.u.u_zone);
+    bind(0, tight, pPack.u.u_tight); bind(1, wide, pPack.u.u_wide); bind(2, sharp, pPack.u.u_sharp);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    for (const t of [sharp, tmp, tight, wide, zone]) gl.deleteTexture(t);
-    for (const f of [fTmp, fTight, fWide, fZone, fWord]) gl.deleteFramebuffer(f);
+    for (const t of [sharp, tmp, tight, wide]) gl.deleteTexture(t);
+    for (const f of [fTmp, fTight, fWide, fWord]) gl.deleteFramebuffer(f);
   }
 
   function buildCarve() {
@@ -377,7 +383,7 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
 
   // ------------------------------------------------------------ carving
   const ops: Op[] = [];
-  let healCarry = 0, healUntil = 0;
+  let healCarry = 0, healUntil = 0, stripOpenUntil = 0;
   const carveTarget = () => {
     gl.bindFramebuffer(gl.FRAMEBUFFER, carveFbo);
     gl.viewport(0, 0, Math.round(L.period * L.carveScale), Math.round(L.h * L.carveScale));
@@ -387,17 +393,20 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
   };
 
   function flushOps(now: number) {
-    if (!ops.length || !carveFbo || !wordTex) return;
+    if (!ops.length || !carveFbo) return;
     carveTarget();
     gl.blendEquation(gl.MAX);
     gl.useProgram(pBrush.p);
-    bind(0, wordTex, pBrush.u.u_word);
-    gl.uniform1f(pBrush.u.u_tile, L.tile);
     gl.uniform2f(pBrush.u.u_band, L.bandTop, L.bandH);
+    gl.uniform1f(pBrush.u.u_pad, BAND_PAD);
+    gl.uniform1f(pBrush.u.u_margin, HEAL_MARGIN);
+    const stripTop = L.bandTop + BAND_PAD - HEAL_MARGIN, stripBottom = L.bandTop + L.bandH - BAND_PAD + HEAL_MARGIN;
     gl.uniform2f(pBrush.u.u_size, L.period, L.h);
     gl.uniform1f(pBrush.u.u_r, L.r);
     const reach = L.r * 2 + 2;
     for (const op of ops) {
+      // a cut in the logo's strip will be closing for a while yet (it has a sound)
+      if (Math.max(op.ay, op.by) + L.r > stripTop && Math.min(op.ay, op.by) - L.r < stripBottom) stripOpenUntil = now + HEAL_SECONDS;
       // bring the stroke into the map's first period, then draw the copy that
       // spills over either edge so the band stays seamless
       const base = Math.floor(Math.min(op.ax, op.bx) / L.period) * L.period;
@@ -417,7 +426,7 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     healUntil = now + HEAL_SECONDS * 2.2;
   }
 
-  // Cuts across the logo close again: their channel shrinks a little each
+  // Cuts across the logo's strip close again: their channel shrinks a little each
   // frame, so the gap narrows to nothing and the logo's own shape is left.
   function heal(dt: number, now: number) {
     if (now > healUntil || !carveFbo) return;
@@ -509,12 +518,18 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
   }
   const oval = (g: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number, rot: number) => { g.beginPath(); g.ellipse(x, y, rx, ry, rot, 0, 6.2832); g.fill(); };
 
-  // What has cracked and what grows there, laid out once per size and stone.
-  // Cracks and moss are painted into a texture the stone shader reads
-  // (r = cracks, g and b = two kinds of moss); the plants are sprites.
+  // Where the stone has cracked and what grows there, laid out once per size
+  // and stone. Cracks and moss are painted into a texture the stone shader
+  // reads (r = cracks, g and b = two kinds of moss); the stonecrop is sprites.
+  //
+  // The cracks are hairlines, and each has somewhere to come from: the top or
+  // bottom edge of the slab, or the edge of the logo. None crosses the logo.
   function buildDecor() {
     const rnd = mulberry(7700 + Math.round(L.period));
-    const pal = (floraTeal = teal()) ? FLORA.teal : FLORA.limestone;
+    const onTeal = (floraTeal = teal());
+    const pal = onTeal ? FLORA.teal : FLORA.limestone;
+    const lushness = onTeal ? 1.8 : 1; // the teal stone is the mossier of the two
+    const accent = onTeal ? 0.14 : 0.42; // how much of the moss is the second kind
     const k = Math.min(1, 2048 / L.period), big = Math.max(0.75, L.scale);
     const c = document.createElement("canvas");
     c.width = Math.max(2, Math.round(L.period * k)); c.height = Math.max(2, Math.round(L.h * k));
@@ -529,145 +544,110 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
       grad.addColorStop(0, `rgba(${rgb},${a})`); grad.addColorStop(1, `rgba(${rgb},0)`);
       g.fillStyle = grad; g.beginPath(); g.arc(x, y, r, 0, 6.3); g.fill();
     });
+    const cushion = (x: number, y: number, n: number, sx: number, sy: number, second: boolean) => {
+      for (let i = 0; i < n; i++) moss(x + (rnd() + rnd() + rnd() - 1.5) * sx, y + (rnd() + rnd() - 1) * sy, (7 + rnd() * 9) * big, 0.5 + rnd() * 0.35, second);
+    };
 
-    // ---- the plants, a few of each drawn once and reused at different sizes
-    // a small fern frond: a dark wiry stem with paired round leaflets
-    const fern = (len: number) => {
-      const pad = 8, half = len * 0.25 + pad, sag = (rnd() - 0.5) * len * 0.3;
-      return sprite(len + pad * 2, half * 2, pad, half, pal.shadow, (q) => {
-        const at = (t: number) => [pad + len * t, half + sag * t * t] as const;
-        const n = Math.max(6, Math.round(len / 7));
-        for (let i = 0; i < n; i++) {
-          const t = (i + 0.6) / n, [x, y] = at(t), a = Math.atan2(2 * sag * t, len);
-          const size = len * 0.105 * (0.5 + 0.5 * Math.sin(Math.PI * Math.min(1, t * 1.25 + 0.12))) * (1 - 0.35 * t) * (0.88 + rnd() * 0.24);
-          for (const side of [-1, 1]) {
-            const cx = x - Math.sin(a) * side * size * 0.95, cy = y + Math.cos(a) * side * size * 0.95, rot = a + Math.PI / 2 + side * 0.2;
-            q.fillStyle = pal.fernDark; oval(q, cx + 0.5, cy + 0.6, size * 1.04, size * 0.78, rot);
-            q.fillStyle = pal.fern[Math.floor(rnd() * 3)]; oval(q, cx, cy, size, size * 0.72, rot);
-            q.globalAlpha = 0.45; q.fillStyle = pal.fernLight; oval(q, cx - size * 0.2, cy - size * 0.22, size * 0.5, size * 0.3, rot); q.globalAlpha = 1;
-          }
-        }
-        q.strokeStyle = pal.stem; q.lineWidth = 1.1; q.lineCap = "round";
-        q.beginPath(); q.moveTo(...at(0));
-        for (let t = 0.1; t <= 1.001; t += 0.1) q.lineTo(...at(t));
-        q.stroke();
-      });
-    };
-    // a sprig: a short stem whose side stalks each end in a little fan of round lobes
-    const sprig = (len: number) => {
-      const pad = 10, half = len * 0.42 + pad;
-      return sprite(len + pad * 2, half * 2, pad, half, pal.shadow, (q) => {
-        const nodes = 3 + Math.floor(rnd() * 3);
-        q.strokeStyle = pal.sprigDark; q.lineWidth = 1; q.lineCap = "round";
-        q.beginPath(); q.moveTo(pad, half); q.lineTo(pad + len, half); q.stroke();
-        for (let i = 0; i <= nodes; i++) {
-          const t = (i + 0.5) / (nodes + 1), x = pad + len * t, tip = i === nodes;
-          for (const side of tip ? [0] : [i % 2 ? 1 : -1]) {
-            const a = tip ? 0 : side * (0.9 + rnd() * 0.4), reach = len * (0.20 + rnd() * 0.12);
-            const hx = (tip ? pad + len : x) + Math.cos(a) * reach, hy = half + Math.sin(a) * reach;
-            q.beginPath(); q.moveTo(tip ? pad + len : x, half); q.lineTo(hx, hy); q.stroke();
-            const r = len * (0.09 + rnd() * 0.04);
-            for (const d of [-0.7, 0, 0.7]) {
-              const lx = hx + Math.cos(a + d) * r * 0.9, ly = hy + Math.sin(a + d) * r * 0.9;
-              q.fillStyle = pal.sprigDark; oval(q, lx + 0.5, ly + 0.6, r * 1.05, r * 0.95, a + d);
-              q.fillStyle = pal.sprig[Math.floor(rnd() * 2)]; oval(q, lx, ly, r, r * 0.88, a + d);
-            }
-          }
-        }
-      });
-    };
-    // stonecrop: a tight rosette of fleshy leaves, paler at their tips
-    const crop = (r: number) => sprite(r * 2 + 6, r * 2 + 6, r + 3, r + 3, pal.shadow, (q) => {
+    // ---- stonecrop: a rosette of fleshy leaves in three rings, each leaf dark
+    // at its base and pale at its tip. A few are drawn once and reused.
+    const crop = (r: number, tones: readonly string[], tip: string) => sprite(r * 2 + 6, r * 2 + 6, r + 3, r + 3, pal.shadow, (q) => {
       const cx = r + 3, cy = r + 3, turn = rnd() * 6.3;
-      q.fillStyle = pal.cropDark; oval(q, cx + 0.4, cy + 0.5, r * 0.92, r * 0.92, 0);
-      for (const [count, at, long, wide] of [[8, 0.55, 0.46, 0.27], [5, 0.24, 0.30, 0.20]] as const) {
+      q.fillStyle = pal.cropDark; oval(q, cx, cy, r * 0.8, r * 0.8, 0);
+      for (const [count, at, long, wide] of [[9, 0.60, 0.42, 0.23], [7, 0.36, 0.34, 0.20], [5, 0.16, 0.22, 0.15]] as const) {
         for (let i = 0; i < count; i++) {
-          const a = turn + (i / count) * 6.2832 + (rnd() - 0.5) * 0.25 + (count === 5 ? 0.4 : 0);
-          const px = cx + Math.cos(a) * r * at, py = cy + Math.sin(a) * r * at;
-          q.fillStyle = pal.crop[Math.floor(rnd() * 3)]; oval(q, px, py, r * long, r * wide, a);
-          q.globalAlpha = 0.7; q.fillStyle = pal.cropTip; oval(q, px + Math.cos(a) * r * long * 0.55, py + Math.sin(a) * r * long * 0.55, r * long * 0.32, r * wide * 0.6, a); q.globalAlpha = 1;
+          const a = turn + ((i + (count === 7 ? 0.5 : 0)) / count) * 6.2832 + (rnd() - 0.5) * 0.3;
+          const reach = r * at * (0.9 + rnd() * 0.2), px = cx + Math.cos(a) * reach, py = cy + Math.sin(a) * reach;
+          const dx = Math.cos(a) * r * long, dy = Math.sin(a) * r * long;
+          const grad = q.createLinearGradient(px - dx, py - dy, px + dx, py + dy);
+          grad.addColorStop(0, pal.cropDark); grad.addColorStop(0.45, tones[Math.floor(rnd() * tones.length)]); grad.addColorStop(1, tip);
+          q.fillStyle = grad; oval(q, px, py, r * long, r * wide * (0.85 + rnd() * 0.3), a);
         }
       }
-      q.fillStyle = pal.crop[1]; oval(q, cx, cy, r * 0.13, r * 0.13, 0);
     });
-    const ferns = [44, 56, 68, 82, 96].map((len) => fern(len * big));
-    const sprigs = [28, 36, 44].map((len) => sprig(len * big));
-    const crops = [6.5, 8, 10, 12].map((r) => crop(r * big));
+    const green = [4.5, 5.5, 7, 8.5].map((r) => crop(r * big, pal.crop, pal.cropTip));
+    const flushed = [5, 6.5].map((r) => crop(r * big, pal.flush, pal.flushTip));
     const pick = <T,>(list: T[]) => list[Math.floor(rnd() * list.length)];
-
     flora = [];
-    const grow = (x: number, y: number, out: number) => {
-      // out: the way plants here lean out from the crack (mostly upward: they reach for light)
-      const what = rnd();
-      if (what < 0.40) {
-        const count = 2 + Math.floor(rnd() * 3);
-        for (let i = 0; i < count; i++) flora.push({ x: x + (rnd() - 0.5) * 6, y: y + (rnd() - 0.5) * 4, sprite: pick(ferns), ang: out + (i / (count - 1) - 0.5) * 1.5 + (rnd() - 0.5) * 0.3, amp: 0.05 + rnd() * 0.04, phase: rnd() * 6.3, scale: 0.8 + rnd() * 0.35, layer: 2 });
-      } else if (what < 0.64) {
-        const count = 2 + Math.floor(rnd() * 3);
-        for (let i = 0; i < count; i++) flora.push({ x: x + (rnd() - 0.5) * 8, y: y + (rnd() - 0.5) * 5, sprite: pick(sprigs), ang: out + (rnd() - 0.5) * 1.6, amp: 0.06 + rnd() * 0.05, phase: rnd() * 6.3, scale: 0.85 + rnd() * 0.3, layer: 1 });
-      } else {
-        const count = 5 + Math.floor(rnd() * 8);
-        for (let i = 0; i < count; i++) flora.push({ x: x + (rnd() + rnd() - 1) * 24 * big, y: y + (rnd() + rnd() - 1) * 11 * big, sprite: pick(crops), ang: rnd() * 6.3, amp: 0, phase: 0, scale: 0.8 + rnd() * 0.4, layer: 0 });
+    // a mat of rosettes packed along a stretch of crack
+    const mat = (x: number, y: number, along: number) => {
+      const count = 6 + Math.floor(rnd() * 10), co = Math.cos(along), si = Math.sin(along);
+      for (let i = 0; i < count; i++) {
+        const u = (rnd() + rnd() - 1) * 17 * big, v = (rnd() + rnd() - 1) * 6 * big;
+        flora.push({ x: x + co * u - si * v, y: y + si * u + co * v, sprite: pick(rnd() < pal.flushed ? flushed : green), ang: rnd() * 6.3, scale: 0.8 + rnd() * 0.4 });
       }
     };
-    // A crack: a wandering line, pulled gently back toward the way it set out
-    // (plus whatever steer adds), thinning as it goes, with the odd short
-    // fork. Moss fills it, and plants root in it every so often.
-    const crack = (x: number, y: number, heading: number, length: number, width: number, lush: number, steer?: (x: number, y: number) => number) => {
-      const steps = Math.max(2, Math.round(length / 5));
-      let ang = heading, second = rnd() < 0.5, untilPlant = (20 + rnd() * 50) * big, untilSwap = 60 + rnd() * 120;
+
+    // A crack: a hairline that wanders, pulled gently back toward the way it
+    // set out, fading as it goes, with the odd short fork. Moss follows it in
+    // patches, not all the way along, and here and there stonecrop has rooted.
+    const crack = (x: number, y: number, heading: number, length: number, lush: number, stop?: (x: number, y: number) => boolean) => {
+      const steps = Math.max(2, Math.round(length / 4));
+      let ang = heading, mossy = rnd() < 0.7, second = rnd() < accent, untilSwap = 20 + rnd() * 60, untilMat = (30 + rnd() * 90) * big;
       for (let i = 0; i < steps; i++) {
         const t = i / steps;
-        ang += (rnd() - 0.5) * 0.5 + (heading - ang) * 0.14 + (steer ? steer(x, y) : 0);
-        if (rnd() < 0.07) ang += (rnd() - 0.5) * 1.1; // a kink
-        const nx = x + Math.cos(ang) * 5, ny = y + Math.sin(ang) * 5, x0 = x, y0 = y;
-        const wd = Math.max(0.8, width * (1 - 0.7 * t));
+        ang += (rnd() - 0.5) * 0.42 + (heading - ang) * 0.10;
+        if (rnd() < 0.06) ang += (rnd() - 0.5) * 1.0; // a kink
+        const nx = x + Math.cos(ang) * 4, ny = y + Math.sin(ang) * 4, x0 = x, y0 = y;
+        if (stop?.(nx, ny)) break;
+        const wd = Math.max(0.5, 1.5 * big * (1 - 0.8 * t));
         wrapped(() => {
-          // a faint wide stroke under a fine one, so the line has a soft edge
-          for (const [mul, a] of [[2.8, 0.25], [1, 0.8]] as const) {
+          // a faint wider stroke under a fine one, so the line has a soft edge
+          for (const [mul, a] of [[2.4, 0.18], [1, 0.7]] as const) {
             g.strokeStyle = `rgba(255,0,0,${a})`; g.lineWidth = wd * mul; g.beginPath(); g.moveTo(x0, y0); g.lineTo(nx, ny); g.stroke();
           }
         });
-        if (lush > 0) {
-          if ((untilSwap -= 5) < 0) { second = !second; untilSwap = 60 + rnd() * 120; }
-          if (rnd() < 0.9 * lush) moss(nx + (rnd() - 0.5) * 9, ny + (rnd() - 0.5) * 9, (8 + rnd() * 9) * big, 0.55 + rnd() * 0.3, second);
-          if (rnd() < 0.10 * lush) moss(nx + (rnd() - 0.5) * 26, ny + (rnd() - 0.5) * 20, (15 + rnd() * 12) * big, 0.7, rnd() < 0.3 ? !second : second);
-          if ((untilPlant -= 5) < 0) {
-            untilPlant = (45 + rnd() * 80) * big / lush;
-            const up = Math.sin(ang - Math.PI / 2) < 0 ? ang - Math.PI / 2 : ang + Math.PI / 2; // the crack's upward side
-            grow(nx, ny, rnd() < 0.8 ? up : up + Math.PI);
-          }
-        }
-        if (length > 60 && rnd() < 0.045) crack(nx, ny, ang + (rnd() < 0.5 ? -1 : 1) * (0.5 + rnd() * 0.5), length * (1 - t) * 0.4, wd * 0.7, lush * 0.6);
+        if ((untilSwap -= 4) < 0) { mossy = mossy ? rnd() < 0.55 : true; second = rnd() < accent; untilSwap = 25 + rnd() * 70; }
+        if (mossy && rnd() < 0.8 * lush) moss(nx + (rnd() - 0.5) * 6, ny + (rnd() - 0.5) * 6, (6 + rnd() * 8) * big, 0.5 + rnd() * 0.35, second);
+        if (mossy && rnd() < 0.06 * lush) moss(nx + (rnd() - 0.5) * 22, ny + (rnd() - 0.5) * 16, (13 + rnd() * 11) * big, 0.7, second);
+        if ((untilMat -= 4) < 0) { untilMat = ((70 + rnd() * 150) * big) / lush; if (rnd() < 0.75) mat(nx, ny, ang); }
+        if (length > 50 && rnd() < 0.035) crack(nx, ny, ang + (rnd() < 0.5 ? -1 : 1) * (0.5 + rnd() * 0.5), length * (1 - t) * 0.45, lush * 0.7, stop);
         x = nx; y = ny;
       }
     };
+    // where the logo's outline is first met at x, coming in from above or below
+    const logoEdge = (x: number, fromAbove: boolean) => {
+      for (let i = 2; i < L.bandH - 2; i += 2) {
+        const y = fromAbove ? L.bandTop + i : L.bandTop + L.bandH - i;
+        if (maskAt(x, y)) return y;
+      }
+      return null;
+    };
+    const stripTop = L.bandTop + BAND_PAD - 18, stripBottom = L.bandTop + L.bandH - BAND_PAD + 18;
+    const inLogoStrip = (_: number, y: number) => y > stripTop && y < stripBottom;
 
     const tiles = Math.round(L.period / L.tile);
     for (let j = 0; j < tiles; j++) {
-      const X0 = j * L.tile;
-      // down the slab through the gap between the wordmark and the mark, so it
-      // crosses the middle without breaking a letter
-      const gap = X0 + (GAP_AFTER_ICON / 2 + WORD_BOX.w + GAP_AFTER_WORD * 0.5) * L.unit;
-      crack(gap + (rnd() - 0.5) * 30, -3, Math.PI / 2, L.h * (0.58 + rnd() * 0.08), 3.0 * big, 1, (x) => Math.max(-0.12, Math.min(0.12, (x - gap) * 0.006)));
-      // across the upper part of the slab
-      const uy = L.h * (0.09 + rnd() * 0.09);
-      crack(X0 + L.tile * (0.04 + rnd() * 0.12), uy, (rnd() - 0.5) * 0.3, L.tile * (0.30 + rnd() * 0.14), 2.6 * big, 1, (_, y) => Math.max(-0.1, Math.min(0.1, (uy - y) * 0.006)));
-      // a shorter one low down, between the copy and the foot of the slab
-      const ly = L.h * (0.845 + rnd() * 0.03);
-      crack(X0 + L.tile * (0.70 + rnd() * 0.2), ly, Math.PI + (rnd() - 0.5) * 0.3, L.tile * (0.16 + rnd() * 0.10), 2.2 * big, 0.9, (_, y) => Math.max(-0.1, Math.min(0.1, (y - ly) * 0.006)));
-      // fine bare cracks in from the edges
-      crack(X0 + L.tile * (0.55 + rnd() * 0.3), -3, Math.PI / 2 + (rnd() - 0.5) * 0.7, L.h * (0.06 + rnd() * 0.08), 1.4 * big, 0.5);
-      crack(X0 + L.tile * (0.15 + rnd() * 0.3), L.h + 3, -Math.PI / 2 + (rnd() - 0.5) * 0.8, L.h * (0.05 + rnd() * 0.06), 1.4 * big, 0.6);
+      const X0 = j * L.tile, across = () => X0 + rnd() * L.tile;
+      // in from the top edge, where the branches keep the stone shaded and moss does best
+      for (let i = 0; i < 3; i++) crack(X0 + L.tile * ((i + 0.15 + rnd() * 0.7) / 3), -3, Math.PI / 2 + (rnd() - 0.5) * 0.9, L.h * (0.08 + rnd() * 0.13), 1.2 * lushness, inLogoStrip);
+      // in from the foot of the slab
+      for (let i = 0; i < 2; i++) crack(X0 + L.tile * ((i + 0.15 + rnd() * 0.7) / 2), L.h + 3, -Math.PI / 2 + (rnd() - 0.5) * 0.9, L.h * (0.04 + rnd() * 0.06), 0.8 * lushness);
+      // out from the logo's edge, upward and downward, never across it
+      for (let i = 0; i < 5; i++) {
+        const x = across(), above = i < 3, y = logoEdge(x, above);
+        if (y === null) continue;
+        crack(x, y + (above ? -1 : 1), (above ? -1 : 1) * Math.PI / 2 + (rnd() - 0.5) * 1.1, (40 + rnd() * 75) * big, 0.9 * lushness, (cx, cy) => maskAt(cx, cy));
+      }
+      // moss creeping in over the shaded top edge, and a few loose cushions below it
+      for (let i = 0; i < Math.round(3 * lushness); i++) cushion(across(), L.h * 0.008, 12 + Math.floor(rnd() * 10), 42 * big, 10 * big, rnd() < accent);
+      for (let i = 0; i < Math.round(3 * lushness); i++) cushion(across(), L.h * (0.04 + rnd() * 0.13), 4 + Math.floor(rnd() * 5), 16 * big, 10 * big, rnd() < accent);
+      // a little on the logo itself: in the hollows, tucked under the walls that shade them
+      let spots = 0;
+      for (let tries = 0; tries < 400 && spots < (onTeal ? 6 : 4); tries++) {
+        const x = across(), y = L.bandTop + BAND_PAD + rnd() * (L.bandH - BAND_PAD * 2);
+        if (!maskAt(x, y) || maskAt(x - 0.757 * 7 * big, y - 0.653 * 7 * big)) continue;
+        spots++;
+        const second = rnd() < accent;
+        for (let i = 0, n = 3 + Math.floor(rnd() * 3); i < n; i++) moss(x + (rnd() - 0.5) * 14, y + (rnd() - 0.5) * 10, (4 + rnd() * 5) * big, 0.6 + rnd() * 0.3, second);
+      }
     }
-    flora.sort((a, b) => a.layer - b.layer);
     if (decorTex) gl.deleteTexture(decorTex);
     decorTex = texture(c.width, c.height, true, c);
   }
 
-  // Each plant with its shadow on the stone behind it. Ferns and sprigs nod in
-  // the wind from where they are rooted; everything rides the slab as it drifts.
-  function drawPlants(t: number) {
+  // The stonecrop, each rosette with its shadow on the stone behind it. It
+  // rides the slab as it drifts.
+  function drawPlants() {
     if (!pg) return;
     pg.setTransform(L.dpr, 0, 0, L.dpr, 0, 0);
     pg.clearRect(0, 0, L.w, L.h);
@@ -676,12 +656,11 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
       const x = ((((pl.x - scroll) % L.period) + L.period) % L.period);
       for (const sx of [x, x - L.period]) {
         if (sx < -reach || sx > L.w + reach) continue;
-        const wind = still || !pl.amp ? 0 : (Math.sin(t * 1.25 + pl.x * 0.013) * 0.55 + Math.sin(t * 0.47 + pl.x * 0.004) * 0.45 + Math.sin(t * 2.3 + pl.phase) * 0.3) * pl.amp;
         pg.save();
-        pg.translate(sx + (pass ? 0 : 3.2), pl.y + (pass ? 0 : 2.4)); // the shadow falls down and to the right
-        pg.rotate(pl.ang + wind);
+        pg.translate(sx + (pass ? 0 : 2.2), pl.y + (pass ? 0 : 1.8)); // the shadow falls down and to the right
+        pg.rotate(pl.ang);
         pg.scale(pl.scale, pl.scale);
-        pg.globalAlpha = pass ? 1 : 0.26;
+        pg.globalAlpha = pass ? 1 : 0.3;
         pg.drawImage(pass ? sp.img : sp.shade, -sp.ax, -sp.ay, sp.w, sp.h);
         pg.restore();
       }
@@ -888,7 +867,10 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     }
 
     if (performance.now() - hand.lastMove > 45) hand.speed *= Math.exp(-dt / 0.09);
-    audio.setMotion(armed ? Math.pow(Math.min(1, hand.speed / 900), 0.7) : 0);
+    // loudest while the cursor cuts as it moves; softer while stone closes over
+    // the logo; softest while the cursor rests, still cutting where it stands
+    const moving = armed ? Math.pow(Math.min(1, hand.speed / 900), 0.7) : 0;
+    audio.setLevels({ carve: moving, heal: now < stripOpenUntil ? 1 : 0, idle: armed && hand.known ? 1 - Math.min(1, moving * 3) : 0 });
     followHint(dt);
 
     flushOps(now);
@@ -917,7 +899,7 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     gl.uniform1f(pStone.u.u_edge, (2 * L.r * 0.4) / (EDGE_SIGMA * L.scale));
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     drawChips(dt);
-    drawPlants(now);
+    drawPlants();
     if (!root.dataset.live) root.dataset.live = "";
   }
 

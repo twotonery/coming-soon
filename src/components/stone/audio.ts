@@ -1,12 +1,17 @@
-// The slab's sound: a recording of rocks tumbling (public/sfx/stone-roll.mp3),
-// looped, and only as loud as the cursor is fast. Nothing sounds until the
-// first click, and nothing while the cursor is still.
+// The slab's sound: three recordings of rocks tumbling, each looped and faded
+// in and out as needed. Loudest to softest:
+//   carve  the cursor cutting as it moves, only as loud as it is fast
+//   heal   stone closing back over the logo
+//   idle   the cursor resting on the stone, still cutting where it stands
+// Nothing sounds until the first click, or while carving is off.
+
+export type StoneSounds = { carve?: string; heal?: string; idle?: string };
+export type StoneLevels = { carve: number; heal: number; idle: number }; // each 0..1
 
 export type StoneAudio = {
   /** Call from a click / tap / key handler: browsers only start audio from one. */
   unlock(): void;
-  /** 0..1, how fast the cursor is moving right now. */
-  setMotion(amount: number): void;
+  setLevels(levels: StoneLevels): void;
   setMuted(muted: boolean): void;
   destroy(): void;
 };
@@ -33,7 +38,7 @@ export function loopChannels(channels: Float32Array[], sr: number, fadeSeconds =
   });
 }
 
-// The recording's bytes, from a normal URL or (for the standalone preview,
+// A recording's bytes, from a normal URL or (for the standalone preview,
 // which may not fetch) straight out of a base64 data: URL.
 async function loadBytes(url: string): Promise<ArrayBuffer> {
   if (url.startsWith("data:")) {
@@ -47,17 +52,28 @@ async function loadBytes(url: string): Promise<ArrayBuffer> {
   return res.arrayBuffer();
 }
 
-const ROLL_GAIN = 2.0; // the recording is quiet; a limiter sits after it
+// How loud each recording plays at full level, and how quickly it comes up and
+// dies away (seconds). The recordings are quiet; a limiter sits after them.
+const TRACKS = {
+  carve: { gain: 2.0, rise: 0.07, fall: 0.2 },
+  heal: { gain: 0.95, rise: 0.25, fall: 0.5 },
+  idle: { gain: 0.4, rise: 0.5, fall: 0.3 },
+} as const;
+type Name = keyof typeof TRACKS;
+const NAMES = Object.keys(TRACKS) as Name[];
 
-export function createStoneAudio(rollUrl?: string): StoneAudio {
+export function createStoneAudio(sounds: StoneSounds = {}): StoneAudio {
   let ctx: AudioContext | null = null;
   let master: GainNode | null = null;
-  let rollGain: GainNode | null = null;
-  let roll: AudioBufferSourceNode | null = null;
+  const gains: Partial<Record<Name, GainNode>> = {};
+  let carve: AudioBufferSourceNode | null = null;
   let muted = false;
   let dead = false;
-  // fetched up front so the first movement after the first click already has sound
-  const rollBytes = rollUrl ? loadBytes(rollUrl).catch((err) => { console.warn(err); return null; }) : Promise.resolve(null);
+  // fetched up front so there is sound from the first movement after the first click
+  const bytes = NAMES.map((name) => {
+    const url = sounds[name];
+    return url ? loadBytes(url).catch((err) => { console.warn(err); return null; }) : Promise.resolve(null);
+  });
 
   function build() {
     const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -68,23 +84,26 @@ export function createStoneAudio(rollUrl?: string): StoneAudio {
     const limiter = ac.createDynamicsCompressor();
     limiter.threshold.value = -9; limiter.knee.value = 6; limiter.ratio.value = 6; limiter.attack.value = 0.003; limiter.release.value = 0.15;
     master.connect(limiter).connect(ac.destination);
-    rollGain = ac.createGain();
-    rollGain.gain.value = 0;
-    rollGain.connect(master);
-    void rollBytes
-      .then((bytes) => (bytes ? ac.decodeAudioData(bytes) : null))
-      .then((decoded) => {
-        if (!decoded || dead || !rollGain) return;
-        const chans = loopChannels(Array.from({ length: decoded.numberOfChannels }, (_, ch) => decoded.getChannelData(ch)), decoded.sampleRate);
-        const loop = ac.createBuffer(chans.length, chans[0].length, decoded.sampleRate);
-        chans.forEach((data, ch) => loop.getChannelData(ch).set(data));
-        roll = ac.createBufferSource();
-        roll.buffer = loop;
-        roll.loop = true;
-        roll.connect(rollGain);
-        roll.start(0, Math.random() * loop.duration);
-      })
-      .catch((err) => console.warn("stone: the hover sound could not be read", err));
+    NAMES.forEach((name, i) => {
+      const gain = (gains[name] = ac.createGain());
+      gain.gain.value = 0;
+      gain.connect(master!);
+      void bytes[i]
+        .then((data) => (data ? ac.decodeAudioData(data) : null))
+        .then((decoded) => {
+          if (!decoded || dead) return;
+          const chans = loopChannels(Array.from({ length: decoded.numberOfChannels }, (_, ch) => decoded.getChannelData(ch)), decoded.sampleRate);
+          const loop = ac.createBuffer(chans.length, chans[0].length, decoded.sampleRate);
+          chans.forEach((data, ch) => loop.getChannelData(ch).set(data));
+          const src = ac.createBufferSource();
+          src.buffer = loop;
+          src.loop = true;
+          src.connect(gain);
+          src.start(0, Math.random() * loop.duration);
+          if (name === "carve") carve = src;
+        })
+        .catch((err) => console.warn(`stone: the ${name} sound could not be read`, err));
+    });
   }
 
   return {
@@ -93,12 +112,15 @@ export function createStoneAudio(rollUrl?: string): StoneAudio {
       if (!ctx) build();
       if (ctx && ctx.state !== "running") void ctx.resume();
     },
-    setMotion(amount) {
-      if (!ctx || !rollGain) return;
-      const t = ctx.currentTime, a = Math.min(1, Math.max(0, amount));
-      // quick to start, a little slower to come to rest; a faster cursor tumbles a touch faster
-      rollGain.gain.setTargetAtTime(a * ROLL_GAIN, t, a > 0.02 ? 0.07 : 0.2);
-      roll?.playbackRate.setTargetAtTime(0.94 + a * 0.12, t, 0.3);
+    setLevels(levels) {
+      if (!ctx) return;
+      const t = ctx.currentTime;
+      for (const name of NAMES) {
+        const a = Math.min(1, Math.max(0, levels[name])), track = TRACKS[name];
+        gains[name]?.gain.setTargetAtTime(a * track.gain, t, a > 0.02 ? track.rise : track.fall);
+      }
+      // a faster cursor tumbles a touch faster
+      carve?.playbackRate.setTargetAtTime(0.94 + Math.min(1, Math.max(0, levels.carve)) * 0.12, t, 0.3);
     },
     setMuted(m) {
       muted = m;
