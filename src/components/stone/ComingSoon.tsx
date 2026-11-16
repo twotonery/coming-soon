@@ -47,18 +47,18 @@ export function ComingSoon() {
       </p>
       <p className="stone-talk">
         <span>Like what you see?</span>
-        <a href="https://cal.com/twotonerydesign/15min" target="_blank" rel="noopener noreferrer" className="stone-glass">
+        <a href="https://cal.com/twotonerydesign/15min" target="_blank" rel="noopener noreferrer" className="stone-glass stone-shine">
           Let&rsquo;s talk.
         </a>
       </p>
-      <p className="stone-clock stone-glass">{clock}</p>
+      <p className="stone-clock">{clock}</p>
       <p className="stone-copy">© Twotonery 2026. All right reserved.</p>
 
-      <div className="stone-switch" role="group" aria-label="Light">
+      <div className="stone-switch stone-glass stone-shine" data-on={sunset ? "sunset" : "sunlit"} role="group" aria-label="Light">
+        <span aria-hidden className="stone-knob" />
         <button type="button" aria-pressed={sunset} onClick={() => setSunset(true)}>
           Sunset
         </button>
-        <span aria-hidden>–</span>
         <button type="button" aria-pressed={!sunset} onClick={() => setSunset(false)}>
           Sunlit
         </button>
@@ -74,7 +74,7 @@ export function ComingSoon() {
         <span className="stone-sound-off">Sound off</span>
       </button>
 
-      <div data-stone-hint aria-hidden className="stone-hint stone-glass">
+      <div data-stone-hint aria-hidden className="stone-hint stone-glass stone-shine">
         Click to carve
       </div>
     </main>
