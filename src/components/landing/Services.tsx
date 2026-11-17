@@ -1,17 +1,10 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
-import { Dot, HLine, VLine } from "./shared";
+import { SERVICES } from "@/content";
+import { Dot, HLine, MediaFill, VLine } from "./shared";
 
-// Only Visual identity has its own picture in the Figma file so far; the
-// others show the hero painting until theirs are ready.
-const SERVICES = [
-  { name: "Brand strategy", image: "/figma/hero.png" },
-  { name: "Visual identity", image: "/figma/service-visual-identity.png" },
-  { name: "Web development", image: "/figma/hero.png" },
-  { name: "Product/UIUX", image: "/figma/hero.png" },
-];
+// The services and their pictures come from the content editor (src/content).
 
 // Page scroll (in svh) spent on each service change while the section is
 // pinned, and on the louver that closes it into Pricing.
@@ -75,7 +68,7 @@ export function Services() {
       const travel = r.height - window.innerHeight;
       const progress = travel > 0 ? clamp01(-r.top / travel) : 0;
       const split = ((SERVICES.length - 1) * STEP) / ((SERVICES.length - 1) * STEP + OUTRO);
-      const x = clamp01(progress / split) * (SERVICES.length - 1);
+      const x = split > 0 ? clamp01(progress / split) * (SERVICES.length - 1) : 0;
 
       SERVICES.forEach((_, k) => {
         const layer = layers.current[k];
@@ -113,13 +106,13 @@ export function Services() {
       <div className="sticky top-0 h-svh min-h-[680px] overflow-clip">
         {SERVICES.map((s, k) => (
           <div
-            key={s.name}
+            key={s.id}
             ref={(el) => { layers.current[k] = el; }}
             className="absolute inset-0 overflow-clip"
             style={k > 0 ? { visibility: "hidden" } : undefined}
           >
             <div ref={(el) => { zooms.current[k] = el; }} className="absolute -top-[65px] -right-3.5 -bottom-[47px] -left-3.5">
-              <Image src={s.image} alt="" fill sizes="100vw" className="object-cover" />
+              <MediaFill media={s.media} sizes="100vw" />
             </div>
           </div>
         ))}
@@ -148,7 +141,7 @@ export function Services() {
                 const d = i - active;
                 return (
                   <li
-                    key={s.name}
+                    key={s.id}
                     aria-current={d === 0 ? "true" : undefined}
                     className="absolute top-[112px] left-6 origin-left text-[34px] leading-10 whitespace-nowrap transition-transform duration-500 ease-[cubic-bezier(.22,1,.36,1)] sm:text-[48px] sm:leading-14"
                     style={{

@@ -1,14 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { DISPLAY, GUTTER, Painting } from "./shared";
+import { PROJECTS } from "@/content";
+import { DISPLAY, GUTTER, MediaFill } from "./shared";
 
-// Only Suho is real; the other two hold the slots until there are more cases.
-const PROJECTS = [
-  { title: "Suho finance platform", tags: "Web design, Web development, UI/UX Design, Branding, Marketing" },
-  { title: "Kala travel companion", tags: "Product strategy, UI/UX Design, Mobile app" },
-  { title: "Noro coffee roasters", tags: "Branding, Visual identity, Packaging, Web design" },
-];
+// The cases come from the content editor (src/content).
 
 // Peeking cases sit at 410px against the 534px one in view.
 const PEEK_SCALE = 410 / 534;
@@ -40,7 +36,7 @@ export function Highlight() {
       const travel = r.height - window.innerHeight;
       const raw = Math.min(Math.max(-r.top / travel, 0), 1) * (PROJECTS.length - 1);
       // ease each hand-over so a case settles in the middle before the next moves in
-      const i = Math.min(Math.floor(raw), PROJECTS.length - 2);
+      const i = Math.max(Math.min(Math.floor(raw), PROJECTS.length - 2), 0);
       const p = i + smoothstep(raw - i);
       const column = cards.current[0]?.parentElement;
       const peekX = column ? parseFloat(getComputedStyle(column).getPropertyValue("--peek-x")) || 0 : 0;
@@ -77,7 +73,7 @@ export function Highlight() {
     <section id="work" ref={section} className="scroll-mt-[calc(var(--nav-h)*-1)]" style={{ height: `${PROJECTS.length * 100}svh` }}>
       {/* the paper sits on the frame, not the section, so it holds still too */}
       <div className={`paper sticky top-0 h-svh overflow-clip ${GUTTER}`}>
-        <p className="absolute top-[calc(var(--nav-h)+16px)] text-[16px] leading-6">Project highlight</p>
+        <p className="absolute top-[calc(var(--nav-h)+16px)] text-[16px] leading-6">Project highlights</p>
 
         {/* the column of cases on the right half on desktop, the peeking ones set
             off to the right of the one in view (centres at 50%+303px vs 50%+144px;
@@ -87,14 +83,15 @@ export function Highlight() {
           <div className="absolute inset-x-(--gutter) top-1/2 [--peek-x:0] lg:left-[calc(50%+144px-267px)] lg:right-auto lg:w-[534px] lg:[--peek-x:0.2978]">
             {PROJECTS.map((p, k) => (
               <div
-                key={p.title}
+                key={p.id}
                 ref={(n) => { cards.current[k] = n; }}
                 aria-hidden={k !== active}
                 className="group absolute inset-x-0 top-0 aspect-[534/338] -translate-y-1/2 will-change-transform"
               >
                 <div className="absolute inset-0 overflow-hidden">
                   <div className="absolute inset-0 transition-transform duration-700 ease-out group-hover:scale-[1.03]">
-                    <Painting scrim="bg-black/24" sizes="(min-width: 1024px) 534px, 100vw" />
+                    <MediaFill media={p.media} sizes="(min-width: 1024px) 534px, 100vw" />
+                    <div className="absolute inset-0 bg-black/24" />
                   </div>
                 </div>
               </div>
@@ -110,7 +107,7 @@ export function Highlight() {
         >
           {PROJECTS.map((p, k) => (
             <h2
-              key={p.title}
+              key={p.id}
               aria-hidden={k !== active}
               className={`${DISPLAY} absolute inset-x-0 top-0 -translate-y-1/2 will-change-[transform,opacity,filter]`}
             >
@@ -122,7 +119,7 @@ export function Highlight() {
         {/* tags for each case stacked in one place; only the active one shows */}
         {PROJECTS.map((p, k) => (
           <p
-            key={p.title}
+            key={p.id}
             aria-hidden={k !== active}
             className={`pointer-events-none absolute right-(--gutter) bottom-11 left-(--gutter) text-[16px] leading-6 transition-opacity duration-500 ease-out lg:right-auto lg:w-[255px] ${k === active ? "opacity-100" : "opacity-0"}`}
           >

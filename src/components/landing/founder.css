@@ -8,9 +8,10 @@
    and its cut edge catches the light, a bright hairline along the top and left
    of every tooth and a thin shade along the bottom and right (hard-edged
    offsets of the stamp's own outline, with no blur). */
-.founder-stamp-wrap { position: relative; width: min(100%, 328px); rotate: -3deg; }
+/* drawn at 70% of its first size: zoom shrinks the teeth, type and postmark with it */
+.founder-stamp-wrap { position: relative; width: min(100%, 328px); rotate: -3deg; zoom: .7; }
 .founder-stamp-edge {
-  filter: drop-shadow(-1.2px -1.2px 0 #fff) drop-shadow(1.2px 1.4px 0 rgb(14 31 33 / .2));
+  filter: drop-shadow(-1.7px -1.7px 0 #fff) drop-shadow(1.7px 2px 0 rgb(14 31 33 / .2));
 }
 .founder-stamp {
   --paper: #efe5cf; --tooth: 14px;

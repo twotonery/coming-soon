@@ -68,3 +68,10 @@ export function Words({ text }: { text: string }) {
     </>
   );
 }
+
+// A project's or service's picture filling its frame; a video plays muted on a loop instead.
+export function MediaFill({ media, sizes }: { media: { kind: "image" | "video"; src: string }; sizes: string }) {
+  if (media.kind === "video")
+    return <video src={media.src} autoPlay muted loop playsInline preload="metadata" className="absolute inset-0 size-full object-cover" />;
+  return <Image src={media.src} alt="" fill sizes={sizes} className="object-cover" />;
+}

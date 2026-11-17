@@ -133,7 +133,7 @@ export function Founder() {
             </div>
           </div>
           <p data-reveal="words" style={delay(80)} className={`${DISPLAY} indent-[88px] lg:max-w-[728px]`}>
-            <Words text="Trusted across products and teams. Our team has worked with over 20+ brands and products." />
+            <Words text="Trusted across products and teams. Our team has worked with over 20 brands and products." />
           </p>
         </div>
       </div>

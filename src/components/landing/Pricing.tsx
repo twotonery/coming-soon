@@ -135,7 +135,7 @@ export function Pricing() {
       </div>
       <div className="flex flex-col gap-10 border-t border-white/30 xl:flex-row xl:items-start xl:justify-between">
         <p data-reveal="up" className="w-[291px] max-w-full pt-6 text-[16px] leading-6 text-white/80">
-          Select the perfect package that aligns with your team&apos;s unique needs!
+          Select the package that fits your team&apos;s needs.
         </p>
         <div className="flex w-full max-w-[872px] flex-col gap-14 xl:w-[872px] xl:shrink-0">
           {/* tabs sit on the divider: the active one's rule lies over it */}

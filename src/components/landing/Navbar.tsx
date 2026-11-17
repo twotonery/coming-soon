@@ -4,10 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { BOOKING_HREF, GUTTER } from "./shared";
 
 const NAV = [
-  { label: "Project Highlights", href: "#work" },
-  { label: "Service", href: "#services" },
+  { label: "Project highlights", href: "#work" },
+  { label: "Services", href: "#services" },
   { label: "Pricing", href: "#pricing" },
-  { label: "About Us", href: "#about" },
+  { label: "About us", href: "#about" },
 ];
 
 // The white logo SVG used as a mask, so it takes the bar's text colour.

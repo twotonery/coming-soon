@@ -7,7 +7,7 @@ import { mountStone } from "@/components/stone/engine";
 import { BOOKING_HREF, GUTTER, Words, delay } from "./shared";
 
 const LINKS = [
-  { label: "Project", href: "#work" },
+  { label: "Projects", href: "#work" },
   { label: "Services", href: "#services" },
   { label: "Pricing", href: "#pricing" },
   { label: "About us", href: "#about" },
@@ -15,7 +15,7 @@ const LINKS = [
 ];
 
 // Placeholder profile links.
-const SOCIAL = ["Instagram", "Dribbble", "Behance", "Linkedin"];
+const SOCIAL = ["Instagram", "Dribbble", "Behance", "LinkedIn"];
 
 // The footer (Figma Code-layer 11:2), on the coming-soon page's stone: the
 // debossed wordmark is a slab the visitor can carve (src/components/stone;
@@ -122,7 +122,7 @@ export function Footer() {
 
       {/* the small print, with the time here and at the studio and the site's sound on its line */}
       <div data-reveal="up" className="stone-muted mt-6 flex flex-col gap-4 text-[16px] leading-6 whitespace-nowrap lg:flex-row lg:items-center lg:justify-between">
-        <p>© Twotonery 2026. All right reserved.</p>
+        <p>© Twotonery 2026. All rights reserved.</p>
         <div className="flex flex-wrap items-center gap-x-8 gap-y-3 lg:gap-x-10">
           <p className="stone-clock">{clock}</p>
           <button type="button" data-stone-sound aria-pressed="true" aria-label="Sound effects" className="stone-sound">

@@ -1,0 +1,139 @@
+{
+  "projects": [
+    {
+      "id": "suho",
+      "title": "Suho finance platform",
+      "tags": "Web design, Web development, UI/UX design, Branding, Marketing",
+      "media": {
+        "kind": "image",
+        "src": "/figma/hero.png"
+      }
+    },
+    {
+      "id": "kala",
+      "title": "Kala travel companion",
+      "tags": "Product strategy, UI/UX design, Mobile app",
+      "media": {
+        "kind": "image",
+        "src": "/figma/hero.png"
+      }
+    },
+    {
+      "id": "noro",
+      "title": "Noro coffee roasters",
+      "tags": "Branding, Visual identity, Packaging, Web design",
+      "media": {
+        "kind": "image",
+        "src": "/figma/hero.png"
+      }
+    }
+  ],
+  "services": [
+    {
+      "id": "brand-strategy",
+      "name": "Brand strategy",
+      "media": {
+        "kind": "image",
+        "src": "/figma/hero.png"
+      }
+    },
+    {
+      "id": "visual-identity",
+      "name": "Visual identity",
+      "media": {
+        "kind": "image",
+        "src": "/figma/service-visual-identity.png"
+      }
+    },
+    {
+      "id": "web-development",
+      "name": "Web development",
+      "media": {
+        "kind": "image",
+        "src": "/figma/hero.png"
+      }
+    },
+    {
+      "id": "product-ui-ux",
+      "name": "Product UI/UX",
+      "media": {
+        "kind": "image",
+        "src": "/figma/hero.png"
+      }
+    }
+  ],
+  "testimonials": [
+    {
+      "id": "main",
+      "quote": "We came in with a long list of features and no clear story. Twotonery helped us step back, figure out what actually mattered to our users, and build around that. The result is a product that feels focused and intentional. Our team still references the thinking from those early workshops.",
+      "name": "John Doe",
+      "role": "Founder of Lorem Ipsum",
+      "photo": "/figma/face-main.jpg",
+      "video": null
+    },
+    {
+      "id": "face-1",
+      "quote": "Fast, calm, and honest about trade-offs. Exactly what a small team needs.",
+      "name": "Alex Doe",
+      "role": "CTO of Lorem Ipsum",
+      "photo": "/figma/face-1.jpg",
+      "video": null
+    },
+    {
+      "id": "face-2",
+      "quote": "Twotonery felt like part of the team from week one. They brought structure to a messy roadmap without slowing us down, and the design system they left behind still holds up.",
+      "name": "Chris Doe",
+      "role": "VP Engineering, Lorem Ipsum",
+      "photo": "/figma/face-2.jpg",
+      "video": null
+    },
+    {
+      "id": "face-3",
+      "quote": "A design partner that understands healthcare is rare. This one also ships.",
+      "name": "Max Doe",
+      "role": "CEO of Lorem Ipsum",
+      "photo": "/figma/face-3.jpg",
+      "video": null
+    },
+    {
+      "id": "face-4",
+      "quote": "Our onboarding completion went up the month we launched. The team keeps asking when we can work with them again.",
+      "name": "Lee Doe",
+      "role": "Product Lead, Lorem Ipsum",
+      "photo": "/figma/face-4.jpg",
+      "video": null
+    },
+    {
+      "id": "face-6",
+      "quote": "They made a regulated product feel simple without cutting corners on compliance.",
+      "name": "Kim Doe",
+      "role": "Head of Design, Lorem Ipsum",
+      "photo": "/figma/face-6.jpg",
+      "video": null
+    },
+    {
+      "id": "t-1",
+      "quote": "They asked better questions about our patients than we did. The intake flow went from our biggest complaint to the part people mention when they recommend us.",
+      "name": "Jane Doe",
+      "role": "Head of Product, Lorem Ipsum",
+      "photo": null,
+      "video": null
+    },
+    {
+      "id": "t-2",
+      "quote": "Clear thinking, beautiful work, zero drama. We shipped the redesign two weeks early.",
+      "name": "Pat Doe",
+      "role": "COO of Lorem Ipsum",
+      "photo": null,
+      "video": null
+    },
+    {
+      "id": "t-3",
+      "quote": "The workshops alone were worth it. Everyone left with the same picture of the product.",
+      "name": "Robin Doe",
+      "role": "Co-founder of Lorem Ipsum",
+      "photo": null,
+      "video": null
+    }
+  ]
+}

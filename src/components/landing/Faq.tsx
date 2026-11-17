@@ -7,13 +7,12 @@ import { DISPLAY_CENTRED, GUTTER, Words, delay } from "./shared";
 // Only the first answer is in the Figma file; the rest are draft copy.
 const QUESTIONS = [
   { q: "What kind of projects do you take on?", a: "Brand strategy, visual identity, websites, and digital products. We're at our best when a complex product needs to feel clear and human." },
-  { q: "How does a project start?", a: "With a short call about your product, your team and what success looks like. We follow up with a clear scope, timeline and quote." },
+  { q: "How does a project start?", a: "With a short call about your product, your team, and what success looks like. We follow up with a clear scope, timeline, and quote." },
   { q: "How long does a project take?", a: "Most identity and website projects take six to ten weeks. Product work usually runs as an ongoing monthly partnership." },
-  { q: "Can you work with our in-house team?", a: "Yes. We often work as an extension of in-house product, marketing and engineering teams, inside your tools and rituals." },
+  { q: "Can you work with our in-house team?", a: "Yes. We often work as an extension of in-house product, marketing, and engineering teams, inside your tools and rituals." },
   { q: "How is pricing structured?", a: "Ongoing product work is a monthly plan. Larger or more complex engagements are scoped and quoted individually." },
   { q: "Do you handle development?", a: "For websites, yes. For products, we hand off clean, documented designs and work closely with your developers through the build." },
-  { q: "What happens after launch?", a: "We stay on to measure, refine and support. Many teams keep us on a monthly plan once the first release is out." },
-  { q: "What happens after launch?", a: "We stay on to measure, refine and support. Many teams keep us on a monthly plan once the first release is out." },
+  { q: "What happens after launch?", a: "We stay on to measure, refine, and support. Many teams keep us on a monthly plan once the first release is out." },
 ];
 
 export function Faq() {
@@ -23,7 +22,7 @@ export function Faq() {
   return (
     <section className={`paper flex flex-col items-center gap-14 overflow-clip py-20 lg:py-[120px] ${GUTTER}`}>
       <div className="flex w-[664px] max-w-full flex-col items-center gap-6 text-center">
-        <p data-reveal="up" className="text-[16px] leading-6">Common Questions Answered</p>
+        <p data-reveal="up" className="text-[16px] leading-6">Common questions answered</p>
         <h2 data-reveal="words" style={delay(80)} className={DISPLAY_CENTRED}><Words text={"Everything you need\nto know first."} /></h2>
       </div>
 

@@ -2,26 +2,12 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState, type CSSProperties, type FocusEvent, type Ref } from "react";
+import { TESTIMONIALS, type Testimonial } from "@/content";
 import { DISPLAY_CENTRED, GUTTER } from "./shared";
 
-type Testimonial = { quote: string; name: string; role: string };
-
-// Only the featured quote is in the Figma file; the rest is placeholder copy until there is real copy.
-const FEATURED: Testimonial = {
-  quote: "We came in with a long list of features and no clear story. Twotonery helped us step back, figure out what actually mattered to our users, and build around that. The result is a product that feels focused and intentional. Our team still references the thinking from those early workshops.",
-  name: "John doe",
-  role: "Founder of lorem ipsum",
-};
-const PLACEHOLDER: Testimonial[] = [
-  { quote: "They asked better questions about our patients than we did. The intake flow went from our biggest complaint to the part people mention when they recommend us.", name: "Jane doe", role: "Head of Product, lorem ipsum" },
-  { quote: "Fast, calm, and honest about trade-offs. Exactly what a small team needs.", name: "Alex doe", role: "CTO of lorem ipsum" },
-  { quote: "Twotonery felt like part of the team from week one. They brought structure to a messy roadmap without slowing us down, and the design system they left behind still holds up.", name: "Chris doe", role: "VP Engineering, lorem ipsum" },
-  { quote: "Clear thinking, beautiful work, zero drama. We shipped the redesign two weeks early.", name: "Pat doe", role: "COO of lorem ipsum" },
-  { quote: "The workshops alone were worth it. Everyone left with the same picture of the product.", name: "Robin doe", role: "Co-founder of lorem ipsum" },
-  { quote: "They made a regulated product feel simple without cutting corners on compliance.", name: "Kim doe", role: "Head of Design, lorem ipsum" },
-  { quote: "Our onboarding completion went up the month we launched. The team keeps asking when we can work with them again.", name: "Lee doe", role: "Product Lead, lorem ipsum" },
-  { quote: "A design partner that understands healthcare is rare. This one also ships.", name: "Max doe", role: "CEO of lorem ipsum" },
-];
+// The words, photos and interviews come from the content editor (src/content),
+// one entry per card below, matched by id.
+const BY_ID = new Map(TESTIMONIALS.map((t) => [t.id, t]));
 
 // The shapes testimonials come in: a landscape interview still, a tall or square portrait, or the words alone.
 type Format = "wide" | "portrait" | "square" | "text";
@@ -38,23 +24,29 @@ type Card = {
   format: Format;
   src?: string;                                // photo cards only
   t: Testimonial;
+  video?: string;                              // an interview to watch; the button shows while the card is open
   x: number; y: number; w: number; h: number;  // resting mat from Figma node 45:55; x is the left edge's offset from the page centre
-  video?: boolean;                             // has an interview to watch; the button shows while the card is open
   wander: [ax: number, ay: number, seconds: number, phase: number]; // reach (px) and pace of its slow roam
 };
 
 // Resting collage (Figma 45:55), in its stacking order. The featured card's open state is node 44:25.
-const CARDS: Card[] = [
-  { id: "face-1", format: "portrait", src: "/figma/face-1.jpg", t: PLACEHOLDER[1], x: -423, y: 290, w: 156, h: 282, wander: [16, 14, 19, 0.4] },
-  { id: "face-2", format: "wide", src: "/figma/face-2.jpg", t: PLACEHOLDER[2], x: -671, y: 521, w: 291, h: 239, wander: [20, 16, 23, 2.1] },
-  { id: "face-3", format: "square", src: "/figma/face-3.jpg", t: PLACEHOLDER[7], x: 529, y: 320, w: 136, h: 150, wander: [14, 16, 17, 4.3] },
-  { id: "face-4", format: "wide", src: "/figma/face-4.jpg", t: PLACEHOLDER[6], x: 162, y: 456, w: 242, h: 201, wander: [18, 14, 21, 1.2] },
-  { id: "face-6", format: "portrait", src: "/figma/face-6.jpg", t: PLACEHOLDER[5], x: 461, y: 521, w: 156, h: 282, wander: [14, 18, 20, 5.2] },
-  { id: "t-3", format: "text", t: PLACEHOLDER[4], x: 53, y: 331, w: 210, h: 150, wander: [16, 14, 19, 0.9] },
-  { id: "main", format: "wide", src: "/figma/face-main.jpg", t: FEATURED, x: -287, y: 425, w: 354, h: 263, video: true, wander: [14, 12, 25, 2.8] },
-  { id: "t-2", format: "text", t: PLACEHOLDER[3], x: 283, y: 695, w: 236, h: 150, wander: [18, 14, 22, 4.8] },
-  { id: "t-1", format: "text", t: PLACEHOLDER[0], x: -380, y: 719, w: 230, h: 150, wander: [18, 12, 18, 3.6] },
+type Place = Omit<Card, "t" | "src" | "video">;
+const PLACES: Place[] = [
+  { id: "face-1", format: "portrait", x: -423, y: 290, w: 156, h: 282, wander: [16, 14, 19, 0.4] },
+  { id: "face-2", format: "wide", x: -671, y: 521, w: 291, h: 239, wander: [20, 16, 23, 2.1] },
+  { id: "face-3", format: "square", x: 529, y: 320, w: 136, h: 150, wander: [14, 16, 17, 4.3] },
+  { id: "face-4", format: "wide", x: 162, y: 456, w: 242, h: 201, wander: [18, 14, 21, 1.2] },
+  { id: "face-6", format: "portrait", x: 461, y: 521, w: 156, h: 282, wander: [14, 18, 20, 5.2] },
+  { id: "t-3", format: "text", x: 53, y: 331, w: 210, h: 150, wander: [16, 14, 19, 0.9] },
+  { id: "main", format: "wide", x: -287, y: 425, w: 354, h: 263, wander: [14, 12, 25, 2.8] },
+  { id: "t-2", format: "text", x: 283, y: 695, w: 236, h: 150, wander: [18, 14, 22, 4.8] },
+  { id: "t-1", format: "text", x: -380, y: 719, w: 230, h: 150, wander: [18, 12, 18, 3.6] },
 ];
+
+const CARDS: Card[] = PLACES.map((p) => {
+  const t = BY_ID.get(p.id)!;
+  return { ...p, t, src: t.photo ?? undefined, video: t.video ?? undefined };
+});
 
 // Small screens swipe through every card, open, in this order (featured first, photos and words alternating).
 const SLIDES = ["main", "t-1", "face-1", "t-3", "face-2", "face-3", "t-2", "face-4", "face-6"].map((id) => CARDS.find((c) => c.id === id)!);
@@ -88,17 +80,52 @@ function Photo({ src, sizes }: { src: string; sizes: string }) {
   );
 }
 
-function WatchButton({ visible = true }: { visible?: boolean }) {
+function WatchButton({ visible = true, onWatch }: { visible?: boolean; onWatch: () => void }) {
   return (
     <button
       type="button"
       tabIndex={visible ? 0 : -1}
       aria-hidden={!visible}
+      onClick={onWatch}
       className={`pill pill-glass absolute bottom-2 left-2 gap-1.5 py-1 pr-2.5 pl-2 text-[12px] leading-4 text-white ${visible ? "opacity-100" : "pointer-events-none opacity-0"}`}
     >
       <Image src="/figma/play.svg" alt="" width={16} height={16} />
       Watch interview
     </button>
+  );
+}
+
+// A YouTube or Vimeo link as the address of its embedded player; null for a video file.
+function embedUrl(src: string) {
+  const yt = src.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/))([\w-]{6,})/);
+  if (yt) return `https://www.youtube-nocookie.com/embed/${yt[1]}?autoplay=1&rel=0`;
+  const vimeo = src.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+  if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}?autoplay=1`;
+  return null;
+}
+
+// The interview, played over the page. Closes on Escape, the button, or a click outside the frame.
+function Player({ src, onClose }: { src: string; onClose: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => { ref.current?.showModal(); }, []);
+  const embed = embedUrl(src);
+  return (
+    <dialog
+      ref={ref}
+      onClose={onClose}
+      onClick={(e) => { if (e.target === ref.current) ref.current?.close(); }}
+      data-lenis-prevent
+      className="m-auto w-[min(960px,calc(100vw-32px))] max-w-none overflow-visible bg-transparent p-0 backdrop:bg-ink/80 backdrop:backdrop-blur-[6px]"
+    >
+      <div className="relative aspect-video bg-black">
+        {embed ? (
+          <iframe src={embed} title="Interview" allow="autoplay; fullscreen; picture-in-picture" allowFullScreen className="absolute inset-0 size-full border-0" />
+        ) : (
+          <video src={src} controls autoPlay playsInline className="absolute inset-0 size-full" />
+        )}
+      </div>
+      <button type="button" onClick={() => ref.current?.close()} className="pill pill-white mt-4">Close</button>
+    </dialog>
   );
 }
 
@@ -136,6 +163,8 @@ export function Testimonials() {
   const [raised, setRaised] = useState<number | null>(null);
   // height of the open card's quote, measured as it opens (copy lengths differ)
   const [quoteH, setQuoteH] = useState(0);
+  // the interview being watched, if any
+  const [playing, setPlaying] = useState<string | null>(null);
   const sectionRef = useRef<HTMLElement>(null);
   const quoteRefs = useRef<(HTMLDivElement | null)[]>([]);
   const roamRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -219,7 +248,7 @@ export function Testimonials() {
                     style={{ height: isOpen ? openPhoto : c.h - MAT_PAD * 2 - LIP, transition: `height .55s ${EASE}` }}
                   >
                     <Photo src={c.src} sizes={`${openW}px`} />
-                    {c.video && <WatchButton visible={isOpen} />}
+                    {c.video && <WatchButton visible={isOpen} onWatch={() => setPlaying(c.video!)} />}
                   </div>
                 )}
                 {isText && (
@@ -240,7 +269,8 @@ export function Testimonials() {
       })}
 
       {/* small screens: no hover, so the cards sit open in a swipeable carousel */}
-      <Carousel />
+      <Carousel onWatch={setPlaying} />
+      {playing && <Player src={playing} onClose={() => setPlaying(null)} />}
     </section>
   );
 }
@@ -252,7 +282,7 @@ export function Testimonials() {
 // it is on screen and the reader hasn't touched it for a slide's length.
 const LOOP = [0, 1, 2].flatMap((copy) => SLIDES.map((c) => ({ c, copy })));
 
-function Carousel() {
+function Carousel({ onWatch }: { onWatch: (src: string) => void }) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -331,7 +361,7 @@ function Carousel() {
           {c.src && (
             <div className="relative" style={{ aspectRatio: `${OPEN[c.format].w - MAT_PAD * 2} / ${OPEN[c.format].photo}` }}>
               <Photo src={c.src} sizes={`${SLIDE_W}px`} />
-              {c.video && <WatchButton />}
+              {c.video && <WatchButton onWatch={() => onWatch(c.video!)} />}
             </div>
           )}
           <Quote t={c.t} large={c.format === "text"} />
