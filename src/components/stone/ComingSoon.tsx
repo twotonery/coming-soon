@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { clockText } from "./clock";
+import { clockText, findCity } from "./clock";
 import { mountStone } from "./engine";
 
 // The coming-soon page: the footer's debossed wordmark as a slab of stone the
@@ -34,6 +34,7 @@ export function ComingSoon() {
   useEffect(() => {
     const tick = () => setClock(clockText(new Date()));
     tick();
+    void findCity().then(tick);
     const timer = window.setInterval(tick, 5000);
     return () => window.clearInterval(timer);
   }, []);
