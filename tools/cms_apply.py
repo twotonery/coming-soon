@@ -3,9 +3,9 @@
 
   python3 tools/cms_apply.py export.json [assets_dir]
 
-export.json holds the editor's documents as {"sections": {...}, "hero": {...},
+export.json holds the editor's documents as {"sections": {...}, "hero": {...}, "founder": {...},
 "projects": [...], "services": [...], "testimonials": [...], "faq": [...]}: the
-`data` of cms/sections and cms/hero, and the `items` of the four lists.
+`data` of cms/sections, cms/hero and cms/founder, and the `items` of the four lists.
 assets_dir holds any newly uploaded files, named <asset id>.<ext>.
 
 Media that already has a `file` is on the site and is left alone. Media with
@@ -50,6 +50,11 @@ site = {
     "sections": {k: v is not False for k, v in (export.get("sections") or {}).items()},
     "hero": {"media": media(look["hero"]) if look.get("hero") else {"kind": "image", "src": "/figma/hero.png"}},
     "pricing": {k: place(look.get(k)) or "/figma/hero.png" for k in ("growth", "dedicated")},
+    "founder": {
+        "portrait": place((export.get("founder") or {}).get("portrait")) or "/founder/portrait.jpg",
+        "quote": (export.get("founder") or {}).get("quote", "").strip(),
+        "name": (export.get("founder") or {}).get("name", "Regina").strip() or "Regina",
+    },
     "projects": [{"id": p["id"], "title": p["title"].strip(), "tags": p["tags"].strip(), "media": media(p["media"])} for p in export["projects"]],
     "services": [{"id": s["id"], "name": s["name"].strip(), "media": media(s["media"])} for s in export["services"]],
     "testimonials": [

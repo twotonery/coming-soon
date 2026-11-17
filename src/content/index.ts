@@ -20,6 +20,8 @@ export type SectionKey = "about" | "founder" | "work" | "services" | "pricing" |
 export const SHOWN = (key: SectionKey) => (site.sections as Partial<Record<SectionKey, boolean>>)[key] !== false;
 export const HERO = site.hero.media as Media;
 // The picture inside each pricing ticket's stamp window.
+// The founder stamp's portrait, and her quote: paragraphs split by an empty line.
+export const FOUNDER = site.founder as { portrait: string; quote: string; name: string };
 export const TICKET_PICTURES = site.pricing as { growth: string; dedicated: string };
 
 export const PROJECTS = site.projects as Project[];

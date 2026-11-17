@@ -1,3 +1,4 @@
+import { FOUNDER } from "@/content";
 import { DISPLAY, GUTTER, Words, delay } from "./shared";
 import "./founder.css";
 
@@ -6,7 +7,7 @@ import "./founder.css";
 // The portrait is a postage stamp, printed on the page's own paper: the photo
 // is laid down as one ink (the brand's teal) so the paper's grain shows through
 // it, and a postmark is struck across its corner onto the sheet. To change the
-// photo, replace public/founder/portrait.jpg (4:5, any colour: it is printed in
+// photo, change it in the content editor (src/content) (4:5, any colour: it is printed in
 // teal either way).
 
 const CLIENTS = [
@@ -94,7 +95,7 @@ export function Founder() {
               <figure className="founder-stamp paper">
                 <div className="founder-print">
                   {/* eslint-disable-next-line @next/next/no-img-element -- blended into the paper; next/image adds nothing here */}
-                  <img src="/founder/portrait.jpg" alt="Regina, founder of Twotonery" width={880} height={1100} loading="lazy" />
+                  <img src={FOUNDER.portrait} alt={`${FOUNDER.name}, founder of Twotonery`} width={880} height={1100} loading="lazy" />
                 </div>
                 <figcaption className="founder-caption">
                   <span>Twotonery</span>
@@ -107,10 +108,9 @@ export function Founder() {
           <figure data-reveal="up" style={delay(120)} className="relative isolate m-0 flex max-w-[484px] flex-col gap-2 text-[16px] leading-6 lg:ml-[11px]">
             <QuoteMark />
             <blockquote className="m-0 flex flex-col gap-6">
-              <p>Good design has never been just about making things. It&rsquo;s about knowing what to make, why it matters, and when it&rsquo;s right.</p>
-              <p>AI is another tool in the process. Taste is what guides it.</p>
+              {FOUNDER.quote.split(/\n\s*\n/).filter((p) => p.trim()).map((p) => <p key={p}>{p.trim()}</p>)}
             </blockquote>
-            <figcaption className="text-muted">Regina</figcaption>
+            <figcaption className="text-muted">{FOUNDER.name}</figcaption>
           </figure>
         </div>
 

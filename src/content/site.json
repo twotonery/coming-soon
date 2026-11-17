@@ -18,6 +18,11 @@
     "growth": "/figma/hero.png",
     "dedicated": "/figma/hero.png"
   },
+  "founder": {
+    "portrait": "/founder/portrait.jpg",
+    "quote": "Good design has never been just about making things. It’s about knowing what to make, why it matters, and when it’s right.\n\nAI is another tool in the process. Taste is what guides it.",
+    "name": "Regina"
+  },
   "projects": [
     {
       "id": "suho",
