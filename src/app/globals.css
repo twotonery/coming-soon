@@ -74,15 +74,23 @@ body { font-family: var(--font-sans), system-ui, sans-serif; }
 /* stone:start */
 /* Limestone in evening sun by default. --ink is the text colour (as r g b). The text
    carries a soft stone-coloured halo so it stays readable over the stone's
-   grain. Until the stone is drawing, the flat colour below stands in for it. */
+   grain. */
 .stone {
-  --ink: 14 31 33; background: #d6c4a3; color: rgb(var(--ink));
+  --ink: 14 31 33; background: #d6c4a3 url(/stone/lime-wide.webp) center 44% / cover no-repeat; color: rgb(var(--ink));
   --halo: 0 0 .9em rgb(244 233 211 / .55), 0 0 2em rgb(244 233 211 / .3);
 }
 /* the brand's teal stone (data-stone="teal"): white text, with a dark halo */
 .stone[data-stone="teal"] {
-  --ink: 255 255 255; background: #5b7d7b;
+  --ink: 255 255 255; background-color: #5b7d7b;
   --halo: 0 0 .9em rgb(9 33 36 / .42), 0 0 2em rgb(9 33 36 / .26);
+}
+/* Until the live stone is drawing (or if the browser can't draw it), a still of
+   it stands in: the same slab, photographed with no text, its band where the live
+   band will be. Narrow screens get an upright still. */
+.stone[data-stone="teal"] { background-image: url(/stone/teal-wide.webp); }
+@media (max-aspect-ratio: 1/1) {
+  .stone { background-image: url(/stone/lime-tall.webp); }
+  .stone[data-stone="teal"] { background-image: url(/stone/teal-tall.webp); }
 }
 .stone-canvas { opacity: 0; transition: opacity .6s ease; }
 .stone[data-live] .stone-canvas { opacity: 1; }

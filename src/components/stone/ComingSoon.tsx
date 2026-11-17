@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { clockText } from "./clock";
 import { mountStone } from "./engine";
@@ -8,8 +7,8 @@ import { mountStone } from "./engine";
 // The coming-soon page: the footer's debossed wordmark as a slab of stone the
 // visitor can carve. engine.ts draws the stone; this is the page around it
 // (its styles are the .stone-* rules in globals.css).
-// The image underneath is the original footer wordmark: it shows until the
-// stone is running, and stays if the browser can't draw it.
+// Underneath it is a still of the stone: it shows until the live stone is
+// running, and stays if the browser can't draw it.
 export function ComingSoon() {
   const root = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -41,9 +40,9 @@ export function ComingSoon() {
 
   return (
     <main ref={root} data-stone={sunset ? "teal" : undefined} className="stone fixed inset-0 touch-none overflow-hidden select-none">
-      <div aria-hidden className="absolute inset-x-0 top-[43.7%] h-[160px] -translate-y-1/2 mix-blend-luminosity sm:h-[260px] lg:h-[392px]">
-        <Image src="/figma/footer-wordmark.png" alt="" fill sizes="100vw" className="object-cover" />
-      </div>
+      {/* the still of the Sunset stone the page opens on (see .stone in globals.css), fetched early */}
+      <link rel="preload" as="image" href="/stone/teal-wide.webp" media="(min-aspect-ratio: 1/1)" />
+      <link rel="preload" as="image" href="/stone/teal-tall.webp" media="(max-aspect-ratio: 1/1)" />
       <canvas data-stone-canvas aria-hidden className="stone-canvas absolute inset-0 size-full" />
 
       <h1 className="sr-only">Twotonery</h1>
