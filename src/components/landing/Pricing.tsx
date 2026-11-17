@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { TICKET_PICTURES } from "@/content";
 import { BOOKING_HREF, DISPLAY, GUTTER, Words, delay } from "./shared";
 import { playCardFlip } from "./sounds";
 import "./pricing.css";
@@ -15,6 +16,7 @@ type Plan = {
   blurb: string[];
   cta: { label: string; className: string };
   paper: string;
+  picture: string; // in the stamp window; set from the content editor
 };
 
 const PLANS: Plan[] = [
@@ -23,6 +25,7 @@ const PLANS: Plan[] = [
     amount: "From $XXX",
     blurb: ["For businesses ready to build, launch, or improve something specific."],
     cta: { label: "Start a project", className: "pill-ink" },
+    picture: TICKET_PICTURES.growth,
     // paper at 44% over white
     paper: "bg-[linear-gradient(rgb(255_255_255/0.56),rgb(255_255_255/0.56)),url(/figma/paper.png)] bg-cover bg-center",
   },
@@ -31,6 +34,7 @@ const PLANS: Plan[] = [
     amount: "Let’s talk",
     blurb: ["Your team, with design built in.", "For businesses that need a consistent design partner as priorities evolve."],
     cta: { label: "Book a strategy call", className: "pill-white" },
+    picture: TICKET_PICTURES.dedicated,
     // paper multiplied into mint
     paper: "bg-[#0dd3b1] bg-[url(/figma/paper.png)] bg-cover bg-center bg-blend-multiply",
   },
@@ -51,7 +55,7 @@ function Ticket({ plan }: { plan: Plan }) {
       <div className="relative m-6 h-[calc((100cqw-48px)*274/372)] w-[calc(100cqw-48px)] shrink-0 lg:absolute lg:top-8 lg:left-8 lg:m-0 lg:h-[274px] lg:w-[372px]">
         <span aria-hidden className="pricing-stamp absolute inset-0 -z-10 overflow-hidden backdrop-blur-[32.45px]">
           {/* the painting fills the stamp upright and turns with it, a quarter clockwise */}
-          <span className="absolute top-1/2 left-1/2 h-[135.77%] w-[73.66%] -translate-1/2 rotate-90 bg-[url(/figma/hero.png)] bg-cover bg-center opacity-44" />
+          <span className="absolute top-1/2 left-1/2 h-[135.77%] w-[73.66%] -translate-1/2 rotate-90 bg-cover bg-center opacity-44" style={{ backgroundImage: `url(${plan.picture})` }} />
         </span>
       </div>
       <div className="relative flex flex-1 flex-col items-start justify-end gap-8 px-6 pt-8 pb-8 text-ink lg:absolute lg:top-8 lg:bottom-8 lg:left-[473px] lg:w-[308px] lg:gap-[37px] lg:p-0">

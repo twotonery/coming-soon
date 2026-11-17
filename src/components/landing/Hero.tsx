@@ -1,5 +1,6 @@
 import Image from "next/image";
-import { Dot, HLine, Painting, VLine } from "./shared";
+import { HERO } from "@/content";
+import { Dot, HLine, MediaFill, VLine } from "./shared";
 
 // Square markers, as offsets from the centre of the hero (Figma 8:37–8:48).
 const DOTS: [number, number][] = [
@@ -12,7 +13,9 @@ export function Hero() {
   return (
     <header id="top" data-nav-tone="dark" className="relative h-(--hero-h) overflow-clip text-white">
       <div className="absolute -top-[108px] -right-3.5 -bottom-4 -left-8">
-        <Painting scrim="bg-black/32" sizes="100vw" preload />
+        {/* the background comes from the content editor: a picture, or a clip on a loop */}
+        <MediaFill media={HERO} sizes="100vw" preload />
+        <div className="absolute inset-0 bg-black/32" />
       </div>
 
       {/* frame: ellipse, crosshair lines and markers */}

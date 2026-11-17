@@ -4,15 +4,17 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { clockText } from "@/components/stone/clock";
 import { mountStone } from "@/components/stone/engine";
+import { SHOWN, type SectionKey } from "@/content";
 import { BOOKING_HREF, GUTTER, Words, delay } from "./shared";
 
-const LINKS = [
-  { label: "Projects", href: "#work" },
-  { label: "Services", href: "#services" },
-  { label: "Pricing", href: "#pricing" },
-  { label: "About us", href: "#about" },
+// A link goes when its section is switched off (src/content).
+const LINKS = ([
+  { label: "Projects", href: "#work", section: "work" },
+  { label: "Services", href: "#services", section: "services" },
+  { label: "Pricing", href: "#pricing", section: "pricing" },
+  { label: "About us", href: "#about", section: "about" },
   { label: "Contact", href: BOOKING_HREF },
-];
+] satisfies { label: string; href: string; section?: SectionKey }[]).filter((l) => !l.section || SHOWN(l.section));
 
 // Placeholder profile links.
 const SOCIAL = ["Instagram", "Dribbble", "Behance", "LinkedIn"];

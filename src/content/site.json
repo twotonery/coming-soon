@@ -1,4 +1,23 @@
 {
+  "sections": {
+    "about": true,
+    "founder": true,
+    "work": true,
+    "services": true,
+    "pricing": true,
+    "testimonials": true,
+    "faq": true
+  },
+  "hero": {
+    "media": {
+      "kind": "image",
+      "src": "/figma/hero.png"
+    }
+  },
+  "pricing": {
+    "growth": "/figma/hero.png",
+    "dedicated": "/figma/hero.png"
+  },
   "projects": [
     {
       "id": "suho",
@@ -69,7 +88,9 @@
       "name": "John Doe",
       "role": "Founder of Lorem Ipsum",
       "photo": "/figma/face-main.jpg",
-      "video": null
+      "video": null,
+      "media": true,
+      "hidden": false
     },
     {
       "id": "face-1",
@@ -77,7 +98,9 @@
       "name": "Alex Doe",
       "role": "CTO of Lorem Ipsum",
       "photo": "/figma/face-1.jpg",
-      "video": null
+      "video": null,
+      "media": true,
+      "hidden": false
     },
     {
       "id": "face-2",
@@ -85,7 +108,9 @@
       "name": "Chris Doe",
       "role": "VP Engineering, Lorem Ipsum",
       "photo": "/figma/face-2.jpg",
-      "video": null
+      "video": null,
+      "media": true,
+      "hidden": false
     },
     {
       "id": "face-3",
@@ -93,7 +118,9 @@
       "name": "Max Doe",
       "role": "CEO of Lorem Ipsum",
       "photo": "/figma/face-3.jpg",
-      "video": null
+      "video": null,
+      "media": true,
+      "hidden": false
     },
     {
       "id": "face-4",
@@ -101,7 +128,9 @@
       "name": "Lee Doe",
       "role": "Product Lead, Lorem Ipsum",
       "photo": "/figma/face-4.jpg",
-      "video": null
+      "video": null,
+      "media": true,
+      "hidden": false
     },
     {
       "id": "face-6",
@@ -109,7 +138,9 @@
       "name": "Kim Doe",
       "role": "Head of Design, Lorem Ipsum",
       "photo": "/figma/face-6.jpg",
-      "video": null
+      "video": null,
+      "media": true,
+      "hidden": false
     },
     {
       "id": "t-1",
@@ -117,7 +148,9 @@
       "name": "Jane Doe",
       "role": "Head of Product, Lorem Ipsum",
       "photo": null,
-      "video": null
+      "video": null,
+      "media": false,
+      "hidden": false
     },
     {
       "id": "t-2",
@@ -125,7 +158,9 @@
       "name": "Pat Doe",
       "role": "COO of Lorem Ipsum",
       "photo": null,
-      "video": null
+      "video": null,
+      "media": false,
+      "hidden": false
     },
     {
       "id": "t-3",
@@ -133,7 +168,9 @@
       "name": "Robin Doe",
       "role": "Co-founder of Lorem Ipsum",
       "photo": null,
-      "video": null
+      "video": null,
+      "media": false,
+      "hidden": false
     }
   ]
 }

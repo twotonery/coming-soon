@@ -32,16 +32,6 @@ export function Dot({ left, top }: { left: string; top: string }) {
   return <span aria-hidden className="absolute size-1 -translate-1/2 bg-white" style={{ left, top }} />;
 }
 
-// The hero painting, with a black scrim, used across the page.
-export function Painting({ scrim, sizes, preload }: { scrim: string; sizes: string; preload?: boolean }) {
-  return (
-    <>
-      <Image src="/figma/hero.png" alt="" fill sizes={sizes} preload={preload} className="object-cover" />
-      <div className={`absolute inset-0 ${scrim}`} />
-    </>
-  );
-}
-
 // Holds a reveal back (ms) after the ones around it; see [data-reveal] in globals.css.
 export const delay = (ms: number) => ({ "--delay": `${ms}ms` }) as CSSProperties;
 
@@ -69,9 +59,9 @@ export function Words({ text }: { text: string }) {
   );
 }
 
-// A project's or service's picture filling its frame; a video plays muted on a loop instead.
-export function MediaFill({ media, sizes }: { media: { kind: "image" | "video"; src: string }; sizes: string }) {
+// The hero's, a project's or a service's picture filling its frame; a video plays muted on a loop instead.
+export function MediaFill({ media, sizes, preload }: { media: { kind: "image" | "video"; src: string }; sizes: string; preload?: boolean }) {
   if (media.kind === "video")
     return <video src={media.src} autoPlay muted loop playsInline preload="metadata" className="absolute inset-0 size-full object-cover" />;
-  return <Image src={media.src} alt="" fill sizes={sizes} className="object-cover" />;
+  return <Image src={media.src} alt="" fill sizes={sizes} preload={preload} className="object-cover" />;
 }

@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { SHOWN, type SectionKey } from "@/content";
 import { BOOKING_HREF, GUTTER } from "./shared";
 
-const NAV = [
-  { label: "Project highlights", href: "#work" },
-  { label: "Services", href: "#services" },
-  { label: "Pricing", href: "#pricing" },
-  { label: "About us", href: "#about" },
-];
+// A link goes when its section is switched off (src/content).
+const NAV = ([
+  { label: "Project highlights", href: "#work", section: "work" },
+  { label: "Services", href: "#services", section: "services" },
+  { label: "Pricing", href: "#pricing", section: "pricing" },
+  { label: "About us", href: "#about", section: "about" },
+] satisfies { label: string; href: string; section: SectionKey }[]).filter((n) => SHOWN(n.section));
 
 // The white logo SVG used as a mask, so it takes the bar's text colour.
 const LOGO_MASK = "url(/figma/logo.svg) left center / contain no-repeat";

@@ -3,8 +3,9 @@
 
   python3 tools/cms_apply.py export.json [assets_dir]
 
-export.json holds the editor's three documents as {"projects": [...],
-"services": [...], "testimonials": [...]} (each the document's `items`).
+export.json holds the editor's documents as {"sections": {...}, "hero": {...},
+"projects": [...], "services": [...], "testimonials": [...]}: the `data` of
+cms/sections and cms/hero, and the `items` of the three lists.
 assets_dir holds any newly uploaded files, named <asset id>.<ext>.
 
 Media that already has a `file` is on the site and is left alone. Media with
@@ -44,11 +45,16 @@ def media(m):
     return {"kind": m["kind"], "src": place(m)}
 
 
+look = export.get("hero") or {}
 site = {
+    "sections": {k: v is not False for k, v in (export.get("sections") or {}).items()},
+    "hero": {"media": media(look["hero"]) if look.get("hero") else {"kind": "image", "src": "/figma/hero.png"}},
+    "pricing": {k: place(look.get(k)) or "/figma/hero.png" for k in ("growth", "dedicated")},
     "projects": [{"id": p["id"], "title": p["title"].strip(), "tags": p["tags"].strip(), "media": media(p["media"])} for p in export["projects"]],
     "services": [{"id": s["id"], "name": s["name"].strip(), "media": media(s["media"])} for s in export["services"]],
     "testimonials": [
-        {"id": t["id"], "quote": t["quote"].strip(), "name": t["name"].strip(), "role": t["role"].strip(), "photo": place(t.get("photo")), "video": place(t.get("video"))}
+        {"id": t["id"], "quote": t["quote"].strip(), "name": t["name"].strip(), "role": t["role"].strip(), "photo": place(t.get("photo")), "video": place(t.get("video")),
+         "media": bool(t["media"]) if t.get("media") is not None else bool(t.get("photo")), "hidden": bool(t.get("hidden"))}
         for t in export["testimonials"]
     ],
 }

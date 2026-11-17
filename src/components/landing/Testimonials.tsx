@@ -43,13 +43,30 @@ const PLACES: Place[] = [
   { id: "t-1", format: "text", x: -380, y: 719, w: 230, h: 150, wander: [18, 12, 18, 3.6] },
 ];
 
-const CARDS: Card[] = PLACES.map((p) => {
-  const t = BY_ID.get(p.id)!;
-  return { ...p, t, src: t.photo ?? undefined, video: t.video ?? undefined };
+// Resting size of a card shown in the form its place wasn't drawn for: a
+// photo card in a words place, or words in a photo place. It keeps the centre
+// of its place.
+const SWAPPED = { photo: { w: 242, h: 201 }, words: { w: 220, h: 150 } };
+
+// Hidden cards are left out. A card shows its photo when `media` is on (and it
+// has one); otherwise it is a words-only card, wherever it sits.
+const CARDS: Card[] = PLACES.flatMap((p) => {
+  const t = BY_ID.get(p.id);
+  if (!t || t.hidden) return [];
+  const photo = (t.media ?? true) && t.photo ? t.photo : undefined;
+  const drawnForPhoto = p.format !== "text";
+  const format: Format = photo ? (drawnForPhoto ? p.format : "wide") : "text";
+  const size = !!photo === drawnForPhoto ? p : photo ? SWAPPED.photo : SWAPPED.words;
+  return [{
+    ...p, format, w: size.w, h: size.h,
+    x: p.x + (p.w - size.w) / 2,
+    y: p.y + (p.h - size.h) / 2,
+    t, src: photo, video: photo ? t.video ?? undefined : undefined,
+  }];
 });
 
 // Small screens swipe through every card, open, in this order (featured first, photos and words alternating).
-const SLIDES = ["main", "t-1", "face-1", "t-3", "face-2", "face-3", "t-2", "face-4", "face-6"].map((id) => CARDS.find((c) => c.id === id)!);
+const SLIDES = ["main", "t-1", "face-1", "t-3", "face-2", "face-3", "t-2", "face-4", "face-6"].flatMap((id) => CARDS.find((c) => c.id === id) ?? []);
 const SLIDE_W = 300;
 const SLIDE_MS = 5000; // how long each slide rests, and how long a swipe holds the auto-slide back
 
@@ -269,7 +286,7 @@ export function Testimonials() {
       })}
 
       {/* small screens: no hover, so the cards sit open in a swipeable carousel */}
-      <Carousel onWatch={setPlaying} />
+      {SLIDES.length > 0 && <Carousel onWatch={setPlaying} />}
       {playing && <Player src={playing} onClose={() => setPlaying(null)} />}
     </section>
   );

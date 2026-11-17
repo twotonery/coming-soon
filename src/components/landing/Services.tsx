@@ -48,7 +48,9 @@ function louver(el: HTMLElement, t: number) {
 // nudged left and faded out by the mask (Figma Services 33:2).
 const LIST_MASK = "linear-gradient(to bottom, transparent 0, #000 100px, #000 176px, transparent 290px)";
 
-export function Services() {
+// `handover` is off when Pricing is hidden: the section then ends on its ink
+// and the next one follows below it, instead of rising under the louver.
+export function Services({ handover = true }: { handover?: boolean }) {
   const ref = useRef<HTMLElement>(null);
   const layers = useRef<(HTMLDivElement | null)[]>([]);
   const zooms = useRef<(HTMLDivElement | null)[]>([]);
@@ -100,7 +102,7 @@ export function Services() {
       className="relative text-white"
       style={{
         height: `calc(max(100svh, 680px) + ${(SERVICES.length - 1) * STEP + OUTRO}svh)`,
-        marginBottom: `-${OUTRO * (1 - LOUVER_FROM)}svh`,
+        marginBottom: handover ? `-${OUTRO * (1 - LOUVER_FROM)}svh` : undefined,
       }}
     >
       <div className="sticky top-0 h-svh min-h-[680px] overflow-clip">
