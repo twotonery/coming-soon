@@ -27,8 +27,8 @@ function Postmark() {
       </defs>
       <circle cx="66" cy="66" r="60" strokeWidth="1.6" />
       <circle cx="66" cy="66" r="31" strokeWidth="1.1" />
-      <text fill="currentColor" stroke="none" fontSize="10.5" letterSpacing="2.6" fontWeight="600">
-        <textPath href="#founder-ring" startOffset="0">TWOTONERY STUDIO · JAKARTA ·</textPath>
+      <text fill="currentColor" stroke="none" fontSize="10.5" letterSpacing="2" fontWeight="600">
+        <textPath href="#founder-ring" startOffset="0" textLength="272" lengthAdjust="spacing">TWOTONERY STUDIO · DPS • YIA ·</textPath>
       </text>
       {/* the studio's mark, from logo.svg */}
       <g transform="translate(66 66) scale(1.02) translate(-20.9 -15)" fill="currentColor" stroke="none">
@@ -52,7 +52,7 @@ export function Founder() {
             <figure className="founder-stamp paper">
               <div className="founder-print">
                 {/* eslint-disable-next-line @next/next/no-img-element -- blended into the paper; next/image's wrapper-free img is fine but adds nothing here */}
-                <img src="/founder/portrait.jpg" alt="Regina Sembiring, founder of Twotonery" width={880} height={1100} loading="lazy" />
+                <img src="/founder/portrait.jpg" alt="Regina, founder of Twotonery" width={880} height={1100} loading="lazy" />
               </div>
               <figcaption className="founder-caption">
                 <span>Twotonery</span>
@@ -63,39 +63,29 @@ export function Founder() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-10 lg:gap-14">
+        <div className="flex flex-col gap-12 lg:gap-16">
           <p data-reveal="words" style={delay(80)} className={`${DISPLAY} indent-[88px]`}>
-            <Words text="Founded and led by Regina Sembiring. The person you meet on the first call is the one who designs your work." />
+            <Words text="I’ve worked across products and teams." />
           </p>
-          <div data-reveal="up" style={delay(160)} className="flex max-w-[537px] flex-col gap-2 text-[16px] leading-6 sm:flex-row sm:gap-[120px]">
-            <p className="w-[120px] shrink-0 whitespace-nowrap">Regina Sembiring</p>
-            <div className="flex flex-col gap-2">
-              <p>Founder and design lead</p>
-              <p className="text-muted">
-                An independent studio, kept small on purpose, so every project gets senior thinking and hands-on craft from start to finish.
-              </p>
+          {/* the companies, on a slow endless line: each logo an ink print on the paper */}
+          <div className="flex flex-col gap-6 border-t border-line pt-6">
+            <p data-reveal="up" className="text-[16px] leading-6 text-muted">Regina, founder</p>
+            <div data-reveal="fade" style={delay(120)} className="founder-marquee" role="list" aria-label="Companies Regina has worked with">
+              <div className="founder-track">
+                {[0, 1].map((copy) =>
+                  CLIENTS.map((c) => (
+                    <span
+                      key={`${copy}-${c.file}`}
+                      role={copy ? undefined : "listitem"}
+                      aria-label={copy ? undefined : c.name}
+                      aria-hidden={copy ? true : undefined}
+                      className="founder-logo"
+                      style={{ maskImage: `url(/clients/${c.file}.svg)`, WebkitMaskImage: `url(/clients/${c.file}.svg)` }}
+                    />
+                  )),
+                )}
+              </div>
             </div>
-          </div>
-        </div>
-      </div>
-
-      {/* the companies, on a slow endless line: each logo an ink print on the paper */}
-      <div className="mt-16 grid gap-y-6 border-t border-line pt-6 lg:mt-24 lg:grid-cols-[minmax(0,1fr)_minmax(0,868px)] lg:items-center">
-        <p data-reveal="up" className="text-[16px] leading-6 text-muted lg:w-[254px]">Companies I&apos;ve worked with</p>
-        <div data-reveal="fade" style={delay(120)} className="founder-marquee" role="list" aria-label="Companies Regina has worked with">
-          <div className="founder-track">
-            {[0, 1].map((copy) =>
-              CLIENTS.map((c) => (
-                <span
-                  key={`${copy}-${c.file}`}
-                  role={copy ? undefined : "listitem"}
-                  aria-label={copy ? undefined : c.name}
-                  aria-hidden={copy ? true : undefined}
-                  className="founder-logo"
-                  style={{ maskImage: `url(/clients/${c.file}.svg)`, WebkitMaskImage: `url(/clients/${c.file}.svg)` }}
-                />
-              )),
-            )}
           </div>
         </div>
       </div>

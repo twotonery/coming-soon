@@ -108,7 +108,7 @@ export function Navbar() {
           <a
             href={BOOKING_HREF}
             onClick={() => setOpen(false)}
-            className="rounded-md bg-white px-3 py-3 text-center text-[16px] leading-6 font-semibold text-teal transition-colors hover:bg-white/85"
+            className="pill pill-white py-3"
           >
             Book a strategy call
           </a>
@@ -131,7 +131,7 @@ export function Navbar() {
         <div className="flex items-center gap-2">
           <a
             href={BOOKING_HREF}
-            className="rounded-md bg-white/12 px-3 py-1.5 text-[16px] whitespace-nowrap leading-6 font-semibold backdrop-blur-[6px] transition-colors duration-300 hover:bg-white/20 group-data-[tone=light]:bg-ink/6 group-data-[tone=light]:hover:bg-ink/12"
+            className="pill pill-glass stone-shine"
           >
             <span className="sm:hidden">Book a call</span>
             <span className="max-sm:hidden">Book a strategy call</span>
@@ -143,7 +143,7 @@ export function Navbar() {
             aria-expanded={open}
             aria-controls="mobile-menu"
             onClick={() => setOpen((o) => !o)}
-            className="relative size-9 rounded-md bg-white/12 backdrop-blur-[6px] transition-colors duration-300 hover:bg-white/20 group-data-[tone=light]:bg-ink/6 group-data-[tone=light]:hover:bg-ink/12 lg:hidden"
+            className="pill pill-glass relative size-[38px] p-0 lg:hidden"
           >
             <span className="absolute top-1/2 left-1/2 h-[1.5px] w-4 -translate-x-1/2 -translate-y-[3.5px] bg-current transition-transform duration-300 ease-out group-data-[open=true]:translate-y-[-0.75px] group-data-[open=true]:rotate-45" />
             <span className="absolute top-1/2 left-1/2 h-[1.5px] w-4 -translate-x-1/2 translate-y-[2px] bg-current transition-transform duration-300 ease-out group-data-[open=true]:translate-y-[-0.75px] group-data-[open=true]:-rotate-45" />

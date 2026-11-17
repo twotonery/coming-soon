@@ -6,6 +6,7 @@ import { Hero } from "@/components/landing/Hero";
 import { Highlight } from "@/components/landing/Highlight";
 import { Navbar } from "@/components/landing/Navbar";
 import { Pricing } from "@/components/landing/Pricing";
+import { ScrollSound } from "@/components/landing/ScrollSound";
 import { Services } from "@/components/landing/Services";
 import { Testimonials } from "@/components/landing/Testimonials";
 import { Reveals } from "@/components/Reveals";
@@ -26,6 +27,7 @@ export default function Home() {
       </main>
       <Footer />
       <Reveals />
+      <ScrollSound />
     </>
   );
 }

@@ -94,7 +94,7 @@ function WatchButton({ visible = true }: { visible?: boolean }) {
       type="button"
       tabIndex={visible ? 0 : -1}
       aria-hidden={!visible}
-      className={`absolute bottom-2 left-2 flex items-center gap-1.5 rounded-[2px] bg-white/16 px-1.5 py-1 text-[12px] leading-4 text-white backdrop-blur-[6px] transition-[opacity,background-color] duration-300 hover:bg-white/28 ${visible ? "opacity-100" : "pointer-events-none opacity-0"}`}
+      className={`pill pill-glass absolute bottom-2 left-2 gap-1.5 py-1 pr-2.5 pl-2 text-[12px] leading-4 text-white ${visible ? "opacity-100" : "pointer-events-none opacity-0"}`}
     >
       <Image src="/figma/play.svg" alt="" width={16} height={16} />
       Watch interview

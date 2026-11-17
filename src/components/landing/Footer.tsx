@@ -73,7 +73,7 @@ export function Footer() {
             <p data-reveal="words" className="w-[241px] text-[24px] leading-8"><Words text="Thoughtful design for what comes next." /></p>
             {/* reveals sit on wrappers where the element has a hover transition of its own */}
             <div data-reveal="up" style={delay(200)}>
-              <a href={BOOKING_HREF} className="stone-cta block rounded-md px-2.5 py-1 text-[16px] leading-6 font-semibold">
+              <a href={BOOKING_HREF} className="pill pill-white">
                 Book a strategy call
               </a>
             </div>
@@ -107,8 +107,8 @@ export function Footer() {
         </div>
       </div>
 
-      {/* the stone's own controls: which light it stands in, the time here and at the studio, and its sound */}
-      <div className="mt-16 flex flex-wrap items-center justify-between gap-x-6 gap-y-4 lg:mt-auto">
+      {/* which light the stone stands in */}
+      <div className="mt-16 flex lg:mt-auto">
         <div className="stone-switch stone-glass stone-shine" data-on={sunset ? "sunset" : "sunlit"} role="group" aria-label="Light">
           <span aria-hidden className="stone-knob" />
           <button type="button" aria-pressed={sunset} onClick={() => setSunset(true)}>
@@ -118,29 +118,27 @@ export function Footer() {
             Sunlit
           </button>
         </div>
-        <p className="stone-clock max-sm:order-last max-sm:w-full">{clock}</p>
-        <button type="button" data-stone-sound aria-pressed="true" aria-label="Sound effects" className="stone-sound">
-          <svg aria-hidden viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M2.5 6.2h2.3L8 3.4v9.2L4.8 9.8H2.5z" />
-            <path className="stone-sound-on" d="M10.4 5.8a3.1 3.1 0 0 1 0 4.4M12.2 4a5.6 5.6 0 0 1 0 8" />
-            <path className="stone-sound-off" d="M10.8 6.2l3 3.6m0-3.6l-3 3.6" />
-          </svg>
-          <span className="stone-sound-on">Sound on</span>
-          <span className="stone-sound-off">Sound off</span>
-        </button>
       </div>
 
+      {/* the small print, with the time here and at the studio and the site's sound on its line */}
       <div data-reveal="up" className="stone-muted mt-6 flex flex-col gap-4 text-[16px] leading-6 whitespace-nowrap lg:flex-row lg:items-center lg:justify-between">
         <p>© Twotonery 2026. All right reserved.</p>
-        <div className="flex items-center gap-4">
-          <a href="#" className="stone-link">Privacy</a>
-          <span aria-hidden>•</span>
-          <a href="#" className="stone-link">Term &amp; conditions</a>
+        <div className="flex flex-wrap items-center gap-x-8 gap-y-3 lg:gap-x-10">
+          <p className="stone-clock">{clock}</p>
+          <button type="button" data-stone-sound aria-pressed="true" aria-label="Sound effects" className="stone-sound">
+            <svg aria-hidden viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2.5 6.2h2.3L8 3.4v9.2L4.8 9.8H2.5z" />
+              <path className="stone-sound-on" d="M10.4 5.8a3.1 3.1 0 0 1 0 4.4M12.2 4a5.6 5.6 0 0 1 0 8" />
+              <path className="stone-sound-off" d="M10.8 6.2l3 3.6m0-3.6l-3 3.6" />
+            </svg>
+            <span className="stone-sound-on">Sound on</span>
+            <span className="stone-sound-off">Sound off</span>
+          </button>
+          <a href="#top" className="stone-link flex items-center gap-2.5">
+            Back to top
+            <Image src="/figma/arrow-up.svg" alt="" width={16} height={16} className="stone-art" />
+          </a>
         </div>
-        <a href="#top" className="stone-link flex items-center gap-2.5">
-          Back to top
-          <Image src="/figma/arrow-up.svg" alt="" width={16} height={16} className="stone-art" />
-        </a>
       </div>
 
       <div data-stone-hint aria-hidden className="stone-hint stone-glass stone-shine">
