@@ -1,6 +1,6 @@
 // The site's editable content: which sections show, the hero background, the
 // pricing tickets' pictures, project highlights, services ("What we shape") and
-// testimonials ("What they say"). site.json is written from the content
+// testimonials ("What they say") and the common questions. site.json is written from the content
 // editor (a Claude artifact; see CMS.md at the repo root), so edit it there
 // rather than by hand, or the next publish from the editor overwrites the change.
 import site from "./site.json";
@@ -25,3 +25,5 @@ export const TICKET_PICTURES = site.pricing as { growth: string; dedicated: stri
 export const PROJECTS = site.projects as Project[];
 export const SERVICES = site.services as Service[];
 export const TESTIMONIALS = site.testimonials as Testimonial[];
+export type Question = { id: string; q: string; a: string };
+export const FAQ = site.faq as Question[];

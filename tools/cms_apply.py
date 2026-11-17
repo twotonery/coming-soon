@@ -4,8 +4,8 @@
   python3 tools/cms_apply.py export.json [assets_dir]
 
 export.json holds the editor's documents as {"sections": {...}, "hero": {...},
-"projects": [...], "services": [...], "testimonials": [...]}: the `data` of
-cms/sections and cms/hero, and the `items` of the three lists.
+"projects": [...], "services": [...], "testimonials": [...], "faq": [...]}: the
+`data` of cms/sections and cms/hero, and the `items` of the four lists.
 assets_dir holds any newly uploaded files, named <asset id>.<ext>.
 
 Media that already has a `file` is on the site and is left alone. Media with
@@ -58,6 +58,9 @@ site = {
         for t in export["testimonials"]
     ],
 }
+site["faq"] = [{"id": f["id"], "q": f["q"].strip(), "a": f["a"].strip()} for f in export["faq"] if f["q"].strip()]
+if not site["faq"]:
+    sys.exit("the site needs at least one question")
 if len(site["projects"]) < 2 or len(site["services"]) < 2:
     sys.exit("the site needs at least two projects and two services")
 (root / "src" / "content" / "site.json").write_text(json.dumps(site, indent=2, ensure_ascii=False) + "\n")
