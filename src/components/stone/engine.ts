@@ -912,9 +912,13 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
 
   try {
     setupStatic();
-    // start with the band placed as in the design: the mark near the middle
+    // start with the band placed as in the design: the mark near the middle.
+    // An upright screen (a phone) starts on the name instead, from its first letter,
+    // since the whole name is wider than a phone.
     layout();
-    scroll = (GAP_AFTER_ICON / 2 + WORD_BOX.w + GAP_AFTER_WORD + (ICON_BOX.w * ICON_SCALE) / 2) * L.unit - L.w * 0.5;
+    scroll = L.w < L.h
+      ? (GAP_AFTER_ICON / 2) * L.unit - L.w * 0.07
+      : (GAP_AFTER_ICON / 2 + WORD_BOX.w + GAP_AFTER_WORD + (ICON_BOX.w * ICON_SCALE) / 2) * L.unit - L.w * 0.5;
   } catch (err) {
     console.warn("stone: falling back to the still image", err);
     plants.remove();
