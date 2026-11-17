@@ -129,9 +129,9 @@ export function Services() {
         <div aria-hidden className="pointer-events-none absolute inset-0">
           <HLine className="top-[calc(50%-332px)]" />
           <HLine className="top-[calc(50%+332px)]" />
-          <div className="absolute inset-y-0 left-3.5 sm:left-[42px]"><VLine left="0px" /></div>
-          <div className="absolute inset-y-0 right-3.5 sm:right-[42px]"><VLine left="0px" /></div>
-          {["left-3.5 sm:left-[42px]", "right-3.5 sm:right-[42px]"].map((x) => (
+          <div className="absolute inset-y-0 left-[calc(var(--gutter)-2px)]"><VLine left="0px" /></div>
+          <div className="absolute inset-y-0 right-[calc(var(--gutter)-2px)]"><VLine left="0px" /></div>
+          {["left-[calc(var(--gutter)-2px)]", "right-[calc(var(--gutter)-2px)]"].map((x) => (
             <div key={x} className={`absolute inset-y-0 ${x}`}>
               <Dot left="0px" top="calc(50% - 332px)" />
               <Dot left="0px" top="calc(50% + 332px)" />
@@ -139,7 +139,7 @@ export function Services() {
           ))}
         </div>
 
-        <div className="absolute inset-x-0 top-1/2 flex -translate-y-1/2 flex-col gap-28 px-8 font-display tracking-[-0.04em] sm:px-[80px] md:flex-row md:items-center md:justify-between">
+        <div className="absolute inset-x-0 top-1/2 flex -translate-y-1/2 flex-col gap-28 px-[calc(var(--gutter)+16px)] font-display tracking-[-0.04em] sm:px-[calc(var(--gutter)+36px)] md:flex-row md:items-center md:justify-between">
           <h2 className="text-[24px] leading-8 font-normal text-white/71">What we shape</h2>
 
           <div className="relative h-10 w-full [--half-gap:8px] [--row:40px] sm:h-14 sm:[--half-gap:12px] sm:[--row:56px] md:w-[408px]">

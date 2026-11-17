@@ -84,7 +84,7 @@ export function Highlight() {
             --peek-x is that 159px as a share of a case's width); below that it
             runs straight, in a band between the title and the tags */}
         <div className="absolute inset-x-0 top-[calc(var(--nav-h)+160px)] bottom-[132px] overflow-clip lg:inset-0 lg:overflow-visible">
-          <div className="absolute inset-x-4 top-1/2 [--peek-x:0] sm:inset-x-11 lg:left-[calc(50%+144px-267px)] lg:right-auto lg:w-[534px] lg:[--peek-x:0.2978]">
+          <div className="absolute inset-x-(--gutter) top-1/2 [--peek-x:0] lg:left-[calc(50%+144px-267px)] lg:right-auto lg:w-[534px] lg:[--peek-x:0.2978]">
             {PROJECTS.map((p, k) => (
               <div
                 key={p.title}
@@ -106,7 +106,7 @@ export function Highlight() {
             they get far from the middle (--name-step is the distance between them) */}
         <div
           ref={names}
-          className="pointer-events-none absolute top-[calc(var(--nav-h)+96px)] right-4 left-4 [--name-step:56px] sm:right-11 sm:left-11 lg:top-1/2 lg:right-auto lg:w-[min(386px,calc(50%-220px))] lg:[--name-step:240px]"
+          className="pointer-events-none absolute top-[calc(var(--nav-h)+96px)] right-(--gutter) left-(--gutter) [--name-step:56px] lg:top-1/2 lg:right-auto lg:w-[min(386px,calc(50%-220px))] lg:[--name-step:240px]"
         >
           {PROJECTS.map((p, k) => (
             <h2
@@ -124,7 +124,7 @@ export function Highlight() {
           <p
             key={p.title}
             aria-hidden={k !== active}
-            className={`pointer-events-none absolute right-4 bottom-11 left-4 text-[16px] leading-6 transition-opacity duration-500 ease-out sm:right-11 sm:left-11 lg:right-auto lg:w-[255px] ${k === active ? "opacity-100" : "opacity-0"}`}
+            className={`pointer-events-none absolute right-(--gutter) bottom-11 left-(--gutter) text-[16px] leading-6 transition-opacity duration-500 ease-out lg:right-auto lg:w-[255px] ${k === active ? "opacity-100" : "opacity-0"}`}
           >
             {p.tags}
           </p>

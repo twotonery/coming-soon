@@ -85,7 +85,7 @@ export function Navbar() {
         id="mobile-menu"
         data-lenis-prevent
         inert={!open}
-        className="pointer-events-none fixed inset-0 flex flex-col justify-between overflow-y-auto bg-ink px-4 pt-[calc(var(--nav-h)+40px)] pb-10 opacity-0 transition-opacity duration-300 group-data-[open=true]:pointer-events-auto group-data-[open=true]:opacity-100 sm:px-11 lg:hidden"
+        className="pointer-events-none fixed inset-0 flex flex-col justify-between overflow-y-auto bg-ink px-(--gutter) pt-[calc(var(--nav-h)+40px)] pb-10 opacity-0 transition-opacity duration-300 group-data-[open=true]:pointer-events-auto group-data-[open=true]:opacity-100 lg:hidden"
       >
         <nav className="flex flex-col border-t border-white/20">
           {NAV.map((n, i) => (

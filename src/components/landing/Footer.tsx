@@ -62,7 +62,7 @@ export function Footer() {
       </div>
       <canvas data-stone-canvas aria-hidden className="stone-canvas absolute inset-0 size-full" />
       {/* the room the wordmark's band takes at the head of the footer (engine.ts lays the band over it) */}
-      <div data-stone-band aria-hidden className="-mx-4 h-[160px] shrink-0 sm:-mx-11 sm:h-[260px] lg:h-[392px]" />
+      <div data-stone-band aria-hidden className="-mx-(--gutter) h-[160px] shrink-0 sm:h-[260px] lg:h-[392px]" />
 
       <div className="flex flex-col gap-14 lg:gap-[72px]">
         <div aria-hidden className="stone-art relative h-px w-full">

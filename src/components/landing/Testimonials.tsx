@@ -317,7 +317,7 @@ function Carousel() {
       role="region"
       aria-roledescription="carousel"
       aria-label="Testimonials"
-      className="relative -mx-4 flex snap-x snap-mandatory items-start gap-3 self-stretch overflow-x-auto px-[calc(50vw-150px)] pb-2 [scrollbar-width:none] sm:-mx-11 lg:hidden [&::-webkit-scrollbar]:hidden"
+      className="relative -mx-(--gutter) flex snap-x snap-mandatory items-start gap-3 self-stretch overflow-x-auto px-[calc(50vw-150px)] pb-2 [scrollbar-width:none] lg:hidden [&::-webkit-scrollbar]:hidden"
     >
       {LOOP.map(({ c, copy }) => (
         <figure

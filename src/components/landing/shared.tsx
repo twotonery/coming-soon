@@ -8,8 +8,10 @@ export const BOOKING_HREF = "mailto:hello@twotonery.com";
 export const DISPLAY = "font-display text-[34px] leading-[40px] tracking-[-0.04em] sm:text-[48px] sm:leading-[56px]";
 export const DISPLAY_CENTRED = "font-display text-[34px] leading-[40px] tracking-[-0.04em] sm:text-[48px] sm:leading-[54px]";
 
-// Side gutter used by every section.
-export const GUTTER = "px-4 sm:px-11";
+// Side gutter used by every section: --gutter (globals.css) is 16px on phones
+// and 44px above, and grows on screens wider than 1440px so the content stays
+// 1352px wide in the middle while grounds still run edge to edge.
+export const GUTTER = "px-(--gutter)";
 
 // Thin white rules from the Figma file (stroke white @ 20%).
 export function HLine({ className = "" }: { className?: string }) {
