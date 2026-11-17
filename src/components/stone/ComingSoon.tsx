@@ -23,6 +23,13 @@ export function ComingSoon() {
   // Sunset is the teal stone, and what the page opens on; Sunlit is the limestone
   // (engine.ts reads data-stone).
   const [sunset, setSunset] = useState(true);
+  // The phone's browser bars (above and below the page) take the page's background
+  // colour, so it follows the stone: they then read as part of the slab.
+  useEffect(() => {
+    const colour = sunset ? "#5b7d7b" : "#d6c4a3";
+    document.documentElement.style.backgroundColor = document.body.style.backgroundColor = colour;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", colour);
+  }, [sunset]);
   // The clock is filled in once the page is running, since only the browser knows the visitor's time.
   const [clock, setClock] = useState("");
   useEffect(() => {

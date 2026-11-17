@@ -76,12 +76,12 @@ body { font-family: var(--font-sans), system-ui, sans-serif; }
    carries a soft stone-coloured halo so it stays readable over the stone's
    grain. Until the stone is drawing, the flat colour below stands in for it. */
 .stone {
-  --ink: 14 31 33; background: #dccdb0; color: rgb(var(--ink));
+  --ink: 14 31 33; background: #d6c4a3; color: rgb(var(--ink));
   --halo: 0 0 .9em rgb(244 233 211 / .55), 0 0 2em rgb(244 233 211 / .3);
 }
 /* the brand's teal stone (data-stone="teal"): white text, with a dark halo */
 .stone[data-stone="teal"] {
-  --ink: 255 255 255; background: #2c5257;
+  --ink: 255 255 255; background: #5b7d7b;
   --halo: 0 0 .9em rgb(9 33 36 / .42), 0 0 2em rgb(9 33 36 / .26);
 }
 .stone-canvas { opacity: 0; transition: opacity .6s ease; }
@@ -144,7 +144,6 @@ body { font-family: var(--font-sans), system-ui, sans-serif; }
 }
 @media (prefers-reduced-motion: no-preference) {
   .stone-shine { animation: stone-sun 11s ease-in-out infinite; }
-  .stone-talk .stone-shine { animation-duration: 13s; animation-delay: -4s; }
   .stone-hint.stone-shine { animation-duration: 9s; animation-delay: -7s; }
 }
 /* top left: "Like what you see?" and its button. Top right: the clock. */
@@ -156,9 +155,9 @@ body { font-family: var(--font-sans), system-ui, sans-serif; }
 .stone-talk { left: max(16px, 3vw); display: flex; align-items: center; gap: .8em; }
 .stone-talk a {
   pointer-events: auto; padding: .5em 1.05em; text-decoration: none; text-shadow: none; font-weight: 500;
-  transition: scale .25s cubic-bezier(.16, 1, .3, 1), filter .25s ease;
+  transition: scale .25s cubic-bezier(.16, 1, .3, 1);
 }
-.stone-talk a:hover, .stone-talk a:focus-visible { scale: 1.04; filter: brightness(1.12); }
+.stone-talk a:hover, .stone-talk a:focus-visible { scale: 1.04; }
 .stone-clock { right: max(16px, 3vw); font-variant-numeric: tabular-nums; letter-spacing: .02em; }
 .stone-clock:empty { display: none; }
 /* bottom left: the Sunset (teal) / Sunlit (limestone) switch. A glass track with a
@@ -213,13 +212,16 @@ body { font-family: var(--font-sans), system-ui, sans-serif; }
 }
 /* The page's text arrives the way the pill does: out of a blur, rising a little. */
 @media (prefers-reduced-motion: no-preference) {
-  .stone-tag, .stone-talk, .stone-copy, .stone-sound, .stone-switch, .stone-clock {
+  /* Glass is animated itself, never from a parent: in Safari a parent that has been
+     animated cuts the glass off from the stone behind it, and it shows a blotch. */
+  .stone-tag, .stone-talk > *, .stone-copy, .stone-sound, .stone-switch, .stone-clock {
     opacity: 0; filter: blur(6px); transform: translateY(8px) scale(.96);
     animation: stone-arrive 1.1s cubic-bezier(.16, 1, .3, 1) .2s forwards;
   }
-  .stone-talk { animation-delay: .35s; }
+  .stone-talk span { animation-delay: .35s; }
   .stone-copy, .stone-sound, .stone-clock { animation-delay: .5s; }
-  /* the switch arrives too, and its sunlight keeps moving after */
+  /* the glass arrives too, and its sunlight keeps moving after */
+  .stone-talk a { animation: stone-arrive 1.1s cubic-bezier(.16, 1, .3, 1) .35s forwards, stone-sun 13s ease-in-out -4s infinite; }
   .stone-switch { animation: stone-arrive 1.1s cubic-bezier(.16, 1, .3, 1) .5s forwards, stone-sun 12s ease-in-out -2s infinite; }
 }
 @keyframes stone-arrive { to { opacity: 1; filter: none; transform: none; } }

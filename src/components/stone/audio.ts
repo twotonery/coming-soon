@@ -11,6 +11,8 @@ export type StoneLevels = { carve: number; heal: number; idle: number }; // each
 export type StoneAudio = {
   /** Call from a click / tap / key handler: browsers only start audio from one. */
   unlock(): void;
+  /** Reads the recordings ahead of the first tap, so that tap is heard at once. */
+  prepare(): void;
   setLevels(levels: StoneLevels): void;
   setMuted(muted: boolean): void;
   destroy(): void;
@@ -110,7 +112,13 @@ export function createStoneAudio(sounds: StoneSounds = {}): StoneAudio {
     unlock() {
       if (dead) return;
       if (!ctx) build();
-      if (ctx && ctx.state !== "running") void ctx.resume();
+      if (ctx && ctx.state !== "running") void ctx.resume().catch(() => {});
+    },
+    prepare() {
+      if (dead || ctx) return;
+      // iPhone: play even with the ring switch on silent, as a game would
+      try { (navigator as unknown as { audioSession?: { type: string } }).audioSession!.type = "playback"; } catch { /* not supported */ }
+      build();
     },
     setLevels(levels) {
       if (!ctx) return;

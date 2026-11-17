@@ -927,6 +927,12 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
   root.addEventListener("pointerdown", onDown);
   root.addEventListener("pointerup", onUp);
   root.addEventListener("pointercancel", onUp);
+  // Phones only let sound start from a tap, and count different moments as one:
+  // listen for all of them, anywhere on the page, with the sound already loaded.
+  const wake = () => audio.unlock();
+  const WAKE = ["touchend", "click", "keydown"] as const;
+  for (const type of WAKE) document.addEventListener(type, wake, { capture: true, passive: true });
+  audio.prepare();
   root.addEventListener("pointerleave", onLeave);
   soundBtn?.addEventListener("click", onSound);
   canvas.addEventListener("webglcontextlost", onLost);
@@ -940,6 +946,7 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
       root.removeEventListener("pointermove", onMove);
       root.removeEventListener("pointerdown", onDown);
       root.removeEventListener("pointerup", onUp);
+      for (const type of WAKE) document.removeEventListener(type, wake, { capture: true });
       root.removeEventListener("pointercancel", onUp);
       root.removeEventListener("pointerleave", onLeave);
       soundBtn?.removeEventListener("click", onSound);
