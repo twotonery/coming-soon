@@ -1,3 +1,6 @@
+// how much of the blurred logo counts as inside the healing border (see engine.ts)
+export const HALO_LEVEL = 0.12;
+
 // GLSL for the stone slab. Everything is measured in CSS pixels with y down;
 // "stone space" is screen space plus the slab's sideways drift.
 
@@ -39,18 +42,20 @@ out vec4 o;
 uniform sampler2D u_tight;
 uniform sampler2D u_wide;
 uniform sampler2D u_sharp;
+uniform sampler2D u_halo;
 void main() {
-  o = vec4(texture(u_tight, v_uv).r, texture(u_wide, v_uv).r, texture(u_sharp, v_uv).r, 1.0);
+  o = vec4(texture(u_tight, v_uv).r, texture(u_wide, v_uv).r, texture(u_sharp, v_uv).r, texture(u_halo, v_uv).r);
 }`;
 
 // One stretch of the cursor's path, cut into the carve map with MAX blending.
 // The map holds "cones": 1 on the stroke's centre line, 0.5 at its edge, 0 one
 // stroke-width out, which the stone shader turns into the logo's own edge.
-//   r = cuts that stay. They are held out of the strip the logo runs along
-//       (the whole width of it, gaps between letters included), tapering
+//   r = cuts that stay. They are held out of the logo and a soft border
+//       round it (the halo in the band's alpha, see PACK_FRAG: it follows the
+//       letters and the mark, and fills the small gaps between them), tapering
 //       off as they near it.
-//   g = every cut as made, strip or not. This channel slowly closes again
-//       (DECAY_FRAG), so a cut across the strip heals and the logo comes back.
+//   g = every cut as made, halo or not. This channel slowly closes again
+//       (DECAY_FRAG), so a cut across the logo heals and the logo comes back.
 export const BRUSH_VERT = `#version 300 es
 in vec2 a_pos;
 uniform vec4 u_rect;  // x0, y0, x1, y1 in stone px
@@ -64,11 +69,13 @@ void main() {
 
 export const BRUSH_FRAG = `#version 300 es
 precision highp float;
+const float HALO_LO = ${HALO_LEVEL - 0.04};
+const float HALO_HI = ${HALO_LEVEL + 0.04};
 in vec2 v_p;
 out vec4 o;
 uniform vec2 u_band;   // top and height of the logo band
-uniform float u_pad;   // plain stone above and below the logo inside that band
-uniform float u_margin; // how far beyond the logo, above and below, cuts still heal
+uniform float u_tile;  // width of one logo tile
+uniform sampler2D u_word; // the logo band (see PACK_FRAG): its alpha is where cuts heal
 uniform vec2 u_a;      // stroke start
 uniform vec2 u_b;      // stroke end
 uniform float u_r;     // half the stroke's width
@@ -76,8 +83,8 @@ void main() {
   vec2 ab = u_b - u_a;
   float t = clamp(dot(v_p - u_a, ab) / max(dot(ab, ab), 1e-4), 0.0, 1.0);
   float cone = max(1.0 - length(v_p - (u_a + ab * t)) / (2.0 * u_r), 0.0);
-  float y = v_p.y - u_band.x;
-  float logo = smoothstep(u_pad - u_margin, u_pad - u_margin + 18.0, y) * (1.0 - smoothstep(u_band.y - u_pad + u_margin - 18.0, u_band.y - u_pad + u_margin, y));
+  vec2 uv = vec2(v_p.x / u_tile, (v_p.y - u_band.x) / u_band.y);
+  float logo = uv.y > 0.0 && uv.y < 1.0 ? smoothstep(HALO_LO, HALO_HI, texture(u_word, uv).a) : 0.0;
   o = vec4(cone * (1.0 - logo), cone, 0.0, 0.0);
 }`;
 

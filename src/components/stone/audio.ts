@@ -58,7 +58,7 @@ async function loadBytes(url: string): Promise<ArrayBuffer> {
 // dies away (seconds). The recordings are quiet; a limiter sits after them.
 const TRACKS = {
   carve: { gain: 2.0, rise: 0.07, fall: 0.2 },
-  heal: { gain: 0.8, rise: 0.25, fall: 0.5 },
+  heal: { gain: 0.64, rise: 0.25, fall: 0.3 },
   idle: { gain: 0.4, rise: 0.5, fall: 0.3 },
 } as const;
 type Name = keyof typeof TRACKS;

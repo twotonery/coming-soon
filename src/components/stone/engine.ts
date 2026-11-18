@@ -26,7 +26,7 @@
 
 import { createStoneAudio, type StoneSounds } from "./audio";
 import { ICON_BOX, ICON_PATHS, WORD_BOX, WORD_PATHS } from "./logo";
-import { BLUR_FRAG, BRUSH_FRAG, BRUSH_VERT, DECAY_FRAG, GRIT_FRAG, GRIT_VERT, PACK_FRAG, QUAD_VERT, STONE_FRAG } from "./shaders";
+import { BLUR_FRAG, BRUSH_FRAG, BRUSH_VERT, DECAY_FRAG, GRIT_FRAG, GRIT_VERT, PACK_FRAG, QUAD_VERT, STONE_FRAG, HALO_LEVEL } from "./shaders";
 
 export type StoneHandle = { destroy(): void };
 export type StoneOptions = {
@@ -39,20 +39,36 @@ const ICON_SCALE = 1.2;   // the mark is cut a little larger than the letters
 const GAP_AFTER_WORD = 11;
 const GAP_AFTER_ICON = 6;
 const TILE_UNITS = WORD_BOX.w + GAP_AFTER_WORD + ICON_BOX.w * ICON_SCALE + GAP_AFTER_ICON;
-const BAND_PAD = 40;      // px of plain stone above and below the band in its texture
+const BAND_PAD = 70;      // px of plain stone above and below the band in its texture (room for the halo)
 const BAND_CENTRE = 0.437; // of the viewport height
 const DRIFT_SECONDS = 95; // time for one tile to pass
 const STEM_UNITS = 3.4;   // the wordmark's stroke width: every cut is this wide
 const EDGE_SIGMA = 2.9;   // px over which a cut's edge can wander and chip (at scale 1)
 
-const HEAL_SECONDS = 3.5;  // how long a cut across the logo's strip takes to close again
-const HEAL_MARGIN = 26;    // px beyond the logo, above and below, that also heal
+const HEAL_SECONDS = 3.5;  // how long a cut across the logo takes to close again
+const HALO_UNITS = 3.2;    // how far round the logo cuts still heal: the blur, in logo units, that makes its border
 const HINT_DELAY = 500;
 const MAX_CHIPS = 640;
 const CHIP = 12; // floats per piece: x, y, vx, vy, size, life, span, drag, turn, spin, id, kind (0 stone, 1 powder)
 
 // A stretch of the cursor's path, to be cut into the carve map.
 type Op = { ax: number; ay: number; bx: number; by: number };
+
+// The outline round the mark (its convex hull, from the points of its paths), so
+// cuts heal across the whole of it, the open middle included.
+const ICON_HULL = (() => {
+  const nums = ICON_PATHS.join(" ").match(/-?\d*\.?\d+/g)!.map(Number);
+  const pts: [number, number][] = [];
+  for (let i = 0; i + 1 < nums.length; i += 2) pts.push([nums[i], nums[i + 1]]);
+  pts.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o: number[], a: number[], b: number[]) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const half = (list: [number, number][]) => {
+    const h: [number, number][] = [];
+    for (const q of list) { while (h.length > 1 && cross(h[h.length - 2], h[h.length - 1], q) <= 0) h.pop(); h.push(q); }
+    return h.slice(0, -1);
+  };
+  return [...half(pts), ...half([...pts].reverse())];
+})();
 // A plant, drawn once to a small canvas (with its silhouette, for its shadow).
 // ax, ay: where it is rooted, in the sprite. Sizes in CSS px.
 type Sprite = { img: HTMLCanvasElement; shade: HTMLCanvasElement; ax: number; ay: number; w: number; h: number };
@@ -232,6 +248,7 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
   let decorTex: WebGLTexture | null = null, shadeTex: WebGLTexture | null = null;
   let flora: Plant[] = [];
   let maskAt: (x: number, y: number) => boolean = () => false; // is this point of the slab inside the logo's shape?
+  let healsAt: (x: number, y: number) => boolean = () => false; // does a cut here close again (the logo and its border)?
   let floraTeal = false;
   let wordTex: WebGLTexture | null = null;
   let carveTex: WebGLTexture | null = null, carveFbo: WebGLFramebuffer | null = null;
@@ -326,6 +343,20 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     g.lineWidth = 1.0;
     for (const d of ICON_PATHS) { const path = new Path2D(d); g.fill(path); g.stroke(path); }
     g.restore();
+    // the same, with the mark filled in to its outline: the source of the healing border
+    const hc = document.createElement("canvas");
+    hc.width = tw; hc.height = th;
+    const hg = hc.getContext("2d")!;
+    hg.drawImage(c, 0, 0);
+    hg.save();
+    hg.translate((GAP_AFTER_ICON / 2 + WORD_BOX.w + GAP_AFTER_WORD) * px, midY);
+    hg.scale(px * ICON_SCALE, px * ICON_SCALE);
+    hg.translate(-ICON_BOX.x, -15);
+    hg.fillStyle = "#fff";
+    hg.beginPath();
+    ICON_HULL.forEach(([x, y], i) => (i ? hg.lineTo(x, y) : hg.moveTo(x, y)));
+    hg.fill();
+    hg.restore();
 
     // a small copy to ask "is the logo here?" of, when laying out cracks and moss
     const small = document.createElement("canvas");
@@ -340,9 +371,9 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
       return seen[(Math.floor(v * mh) * mw + Math.floor(u * mw)) * 4] > 127;
     };
 
-    const sharp = texture(tw, th, true, c);
-    const tmp = texture(tw, th, true), tight = texture(tw, th, true), wide = texture(tw, th, true);
-    const fTmp = target(tmp), fTight = target(tight), fWide = target(wide);
+    const sharp = texture(tw, th, true, c), filled = texture(tw, th, true, hc);
+    const tmp = texture(tw, th, true), tight = texture(tw, th, true), wide = texture(tw, th, true), halo = texture(tw, th, true);
+    const fTmp = target(tmp), fTight = target(tight), fWide = target(wide), fHalo = target(halo);
     gl.disable(gl.BLEND);
     gl.viewport(0, 0, tw, th);
     gl.bindVertexArray(quad);
@@ -357,16 +388,35 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     const sTight = EDGE_SIGMA * L.scale * k, sWide = 9 * L.scale * k;
     blur(sharp, fTmp, 1, 0, sTight); blur(tmp, fTight, 0, 1, sTight);
     blur(tight, fTmp, 1, 0, sWide); blur(tmp, fWide, 0, 1, sWide);
+    // the border where cuts heal: the logo (the mark filled in) blurred far, then cut off at HALO_LEVEL
+    const sHalo = HALO_UNITS * px;
+    blur(filled, fTmp, 1, 0, sHalo); blur(tmp, fHalo, 0, 1, sHalo);
 
     if (wordTex) gl.deleteTexture(wordTex);
     wordTex = texture(tw, th, true);
     const fWord = target(wordTex);
     gl.useProgram(pPack.p);
-    bind(0, tight, pPack.u.u_tight); bind(1, wide, pPack.u.u_wide); bind(2, sharp, pPack.u.u_sharp);
+    bind(0, tight, pPack.u.u_tight); bind(1, wide, pPack.u.u_wide); bind(2, sharp, pPack.u.u_sharp); bind(3, halo, pPack.u.u_halo);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    // a small copy of the halo, to ask "does this cut heal?" of (it decides the sound)
+    const hw = Math.min(512, tw), hh = Math.max(1, Math.round((th * hw) / tw));
+    const fSmall = gl.createFramebuffer()!, small2 = texture(hw, hh, true);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fSmall);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, small2, 0);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fWord); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, fSmall);
+    gl.blitFramebuffer(0, 0, tw, th, 0, 0, hw, hh, gl.COLOR_BUFFER_BIT, gl.LINEAR);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fSmall);
+    const haloPx = new Uint8Array(hw * hh * 4);
+    gl.readPixels(0, 0, hw, hh, gl.RGBA, gl.UNSIGNED_BYTE, haloPx);
+    healsAt = (x, y) => {
+      const v = (y - L.bandTop) / L.bandH;
+      if (v < 0 || v >= 1) return false;
+      const u = (((x % L.tile) + L.tile) % L.tile) / L.tile;
+      return haloPx[(Math.floor(v * hh) * hw + Math.floor(u * hw)) * 4 + 3] > HALO_LEVEL * 255;
+    };
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    for (const t of [sharp, tmp, tight, wide]) gl.deleteTexture(t);
-    for (const f of [fTmp, fTight, fWide, fWord]) gl.deleteFramebuffer(f);
+    for (const t of [sharp, filled, tmp, tight, wide, halo, small2]) gl.deleteTexture(t);
+    for (const f of [fTmp, fTight, fWide, fHalo, fWord, fSmall]) gl.deleteFramebuffer(f);
   }
 
   function buildCarve() {
@@ -392,21 +442,31 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     gl.bindVertexArray(quad);
   };
 
+  // does a stretch of the path pass through where cuts heal?
+  function crossesHalo(op: Op) {
+    const n = Math.max(1, Math.ceil(Math.hypot(op.bx - op.ax, op.by - op.ay) / (L.r * 0.5)));
+    for (let i = 0; i <= n; i++) {
+      const x = op.ax + ((op.bx - op.ax) * i) / n, y = op.ay + ((op.by - op.ay) * i) / n;
+      if (healsAt(x, y)) return true;
+    }
+    return false;
+  }
+
   function flushOps(now: number) {
     if (!ops.length || !carveFbo) return;
     carveTarget();
     gl.blendEquation(gl.MAX);
     gl.useProgram(pBrush.p);
     gl.uniform2f(pBrush.u.u_band, L.bandTop, L.bandH);
-    gl.uniform1f(pBrush.u.u_pad, BAND_PAD);
-    gl.uniform1f(pBrush.u.u_margin, HEAL_MARGIN);
-    const stripTop = L.bandTop + BAND_PAD - HEAL_MARGIN, stripBottom = L.bandTop + L.bandH - BAND_PAD + HEAL_MARGIN;
+    gl.uniform1f(pBrush.u.u_tile, L.tile);
+    bind(0, wordTex!, pBrush.u.u_word);
     gl.uniform2f(pBrush.u.u_size, L.period, L.h);
     gl.uniform1f(pBrush.u.u_r, L.r);
     const reach = L.r * 2 + 2;
     for (const op of ops) {
-      // a cut in the logo's strip will be closing for a while yet (it has a sound)
-      if (Math.max(op.ay, op.by) + L.r > stripTop && Math.min(op.ay, op.by) - L.r < stripBottom) stripOpenUntil = now + HEAL_SECONDS;
+      // a cut that crossed the logo will be closing for a little while (it has a
+      // sound): until it looks closed, which is about two thirds of the way through
+      if (crossesHalo(op)) stripOpenUntil = now + HEAL_SECONDS * 0.65;
       // bring the stroke into the map's first period, then draw the copy that
       // spills over either edge so the band stays seamless
       const base = Math.floor(Math.min(op.ax, op.bx) / L.period) * L.period;
