@@ -211,8 +211,14 @@ void main() {
   float fx = surface(s + vec2(e, 0.0), m, moss, th);
   float fy = surface(s + vec2(0.0, e), m, moss, th);
   slope += vec2(fx - f0, fy - f0) / e;
-  float grown = moss * 2.6 - crack * 1.6 + (nC.g - 0.5) * 7.0;
+  float grown = moss * 2.6 + (nC.g - 0.5) * 7.0;
   slope += vec2(dFdx(grown), -dFdy(grown)) * u_dpr;
+  // the crack's own little valley, sloped from the texture itself (smooth),
+  // not from screen-pixel differences (which step)
+  vec2 dU = vec2(0.6 / u_period, 0.0), dV = vec2(0.0, 0.6 / u_res.y), uv = vec2(s.x / u_period, s.y / u_res.y);
+  float cxp = smoothstep(0.04, 0.85, texture(u_decor, uv + dU).r), cxm = smoothstep(0.04, 0.85, texture(u_decor, uv - dU).r);
+  float cyp = smoothstep(0.04, 0.85, texture(u_decor, uv + dV).r), cym = smoothstep(0.04, 0.85, texture(u_decor, uv - dV).r);
+  slope -= vec2(cxp - cxm, cyp - cym) / 1.2 * 1.6 * (1.0 - m);
 
   vec3 n = normalize(vec3(-slope, 1.0));
   float ndl = max(dot(n, SUN), 0.0) / SUN.z;

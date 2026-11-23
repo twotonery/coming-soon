@@ -535,7 +535,9 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     const pal = onTeal ? FLORA.teal : FLORA.limestone;
     const lushness = onTeal ? 1.8 : 1; // the teal stone is the mossier of the two
     const accent = onTeal ? 0.14 : 0.42; // how much of the moss is the second kind
-    const k = Math.min(1, 2048 / L.period), big = Math.max(0.75, L.scale);
+    // drawn at the screen's own sharpness (up to 2x), so the hairlines stay smooth
+    const maxW = Math.min(4096, gl.getParameter(gl.MAX_TEXTURE_SIZE) as number);
+    const k = Math.min(Math.max(1, Math.min(2, L.dpr)), maxW / L.period), big = Math.max(0.75, L.scale);
     const c = document.createElement("canvas");
     c.width = Math.max(2, Math.round(L.period * k)); c.height = Math.max(2, Math.round(L.h * k));
     const g = c.getContext("2d")!;
@@ -544,6 +546,28 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     g.scale(k, k);
     g.lineCap = "round";
     const wrapped = (draw: () => void) => { for (const dx of [0, -L.period, L.period]) { g.save(); g.translate(dx, 0); draw(); g.restore(); } };
+    // The cracks go on layers of their own, solid, so where their strokes
+    // overlap they don't add up into beads; each is laid on once at the end.
+    const layer = () => {
+      const lc = document.createElement("canvas"); lc.width = c.width; lc.height = c.height;
+      const lg = lc.getContext("2d")!; lg.scale(k, k); lg.lineCap = "round"; lg.lineJoin = "round"; lg.strokeStyle = "#f00";
+      return { lc, lg };
+    };
+    const fine = layer(), soft = layer();
+    // a crack's path, drawn as one smooth curve through the midpoints of its steps
+    const strokeCrack = (pts: number[], wds: number[]) => {
+      for (const [{ lg }, mul] of [[soft, 2.4], [fine, 1]] as const) for (const dx of [0, -L.period, L.period]) {
+        lg.save(); lg.translate(dx, 0);
+        for (let i = 1; i < pts.length / 2; i++) {
+          const ax = i === 1 ? pts[0] : (pts[2 * i - 4] + pts[2 * i - 2]) / 2, ay = i === 1 ? pts[1] : (pts[2 * i - 3] + pts[2 * i - 1]) / 2;
+          const last = i === pts.length / 2 - 1;
+          const bx = last ? pts[2 * i] : (pts[2 * i - 2] + pts[2 * i]) / 2, by = last ? pts[2 * i + 1] : (pts[2 * i - 1] + pts[2 * i + 1]) / 2;
+          lg.lineWidth = wds[i - 1] * mul;
+          lg.beginPath(); lg.moveTo(ax, ay); lg.quadraticCurveTo(pts[2 * i - 2], pts[2 * i - 1], bx, by); lg.stroke();
+        }
+        lg.restore();
+      }
+    };
     const moss = (x: number, y: number, r: number, a: number, second: boolean) => wrapped(() => {
       const grad = g.createRadialGradient(x, y, 0, x, y, r), rgb = second ? "0,0,255" : "0,255,0";
       grad.addColorStop(0, `rgba(${rgb},${a})`); grad.addColorStop(1, `rgba(${rgb},0)`);
@@ -587,20 +611,16 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
     // patches, not all the way along, and here and there stonecrop has rooted.
     const crack = (x: number, y: number, heading: number, length: number, lush: number, stop?: (x: number, y: number) => boolean) => {
       const steps = Math.max(2, Math.round(length / 4));
+      const pts = [x, y], wds: number[] = [];
       let ang = heading, mossy = rnd() < 0.7, second = rnd() < accent, untilSwap = 20 + rnd() * 60, untilMat = (30 + rnd() * 90) * big;
       for (let i = 0; i < steps; i++) {
         const t = i / steps;
         ang += (rnd() - 0.5) * 0.42 + (heading - ang) * 0.10;
         if (rnd() < 0.06) ang += (rnd() - 0.5) * 1.0; // a kink
-        const nx = x + Math.cos(ang) * 4, ny = y + Math.sin(ang) * 4, x0 = x, y0 = y;
+        const nx = x + Math.cos(ang) * 4, ny = y + Math.sin(ang) * 4;
         if (stop?.(nx, ny)) break;
-        const wd = Math.max(0.5, 1.5 * big * (1 - 0.8 * t));
-        wrapped(() => {
-          // a faint wider stroke under a fine one, so the line has a soft edge
-          for (const [mul, a] of [[2.4, 0.18], [1, 0.7]] as const) {
-            g.strokeStyle = `rgba(255,0,0,${a})`; g.lineWidth = wd * mul; g.beginPath(); g.moveTo(x0, y0); g.lineTo(nx, ny); g.stroke();
-          }
-        });
+        wds.push(Math.max(0.5, 1.5 * big * (1 - 0.8 * t)));
+        pts.push(nx, ny);
         if ((untilSwap -= 4) < 0) { mossy = mossy ? rnd() < 0.55 : true; second = rnd() < accent; untilSwap = 25 + rnd() * 70; }
         if (mossy && rnd() < 0.8 * lush) moss(nx + (rnd() - 0.5) * 6, ny + (rnd() - 0.5) * 6, (6 + rnd() * 8) * big, 0.5 + rnd() * 0.35, second);
         if (mossy && rnd() < 0.06 * lush) moss(nx + (rnd() - 0.5) * 22, ny + (rnd() - 0.5) * 16, (13 + rnd() * 11) * big, 0.7, second);
@@ -608,6 +628,7 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
         if (length > 50 && rnd() < 0.035) crack(nx, ny, ang + (rnd() < 0.5 ? -1 : 1) * (0.5 + rnd() * 0.5), length * (1 - t) * 0.45, lush * 0.7, stop);
         x = nx; y = ny;
       }
+      strokeCrack(pts, wds);
     };
     // where the logo's outline is first met at x, coming in from above or below
     const logoEdge = (x: number, fromAbove: boolean) => {
@@ -646,6 +667,11 @@ export function mountStone(root: HTMLElement, options: StoneOptions = {}): Stone
         for (let i = 0, n = 3 + Math.floor(rnd() * 3); i < n; i++) moss(x + (rnd() - 0.5) * 14, y + (rnd() - 0.5) * 10, (4 + rnd() * 5) * big, 0.6 + rnd() * 0.3, second);
       }
     }
+    // a faint wider line under a fine one, so each crack has a soft edge
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalAlpha = 0.18; g.drawImage(soft.lc, 0, 0);
+    g.globalAlpha = 0.7; g.drawImage(fine.lc, 0, 0);
+    g.globalAlpha = 1;
     if (decorTex) gl.deleteTexture(decorTex);
     decorTex = texture(c.width, c.height, true, c);
   }
