@@ -50,7 +50,7 @@ export function ComingSoon() {
       <p className="stone-tag">
         <strong>Thoughtful design for what comes next.</strong>
         <br />
-        Coming soon December 2026.
+        Coming soon January 2027.
       </p>
       <p className="stone-talk">
         <span>Like what you see?</span>

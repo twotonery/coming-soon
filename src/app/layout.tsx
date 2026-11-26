@@ -8,17 +8,17 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 
 export const metadata: Metadata = {
   title: "Twotonery — coming soon",
-  description: "Thoughtful design for what comes next. Coming soon December 2026.",
+  description: "Thoughtful design for what comes next. Coming soon January 2027.",
   // links shared anywhere point at the real address, and their preview image (opengraph-image.jpg) with it
   metadataBase: new URL("https://twotonery.com"),
   openGraph: {
     title: "Twotonery — coming soon",
-    description: "Thoughtful design for what comes next. Coming soon December 2026.",
+    description: "Thoughtful design for what comes next. Coming soon January 2027.",
     url: "/",
     siteName: "Twotonery",
     type: "website",
   },
-  twitter: { card: "summary_large_image", title: "Twotonery — coming soon", description: "Thoughtful design for what comes next. Coming soon December 2026." },
+  twitter: { card: "summary_large_image", title: "Twotonery — coming soon", description: "Thoughtful design for what comes next. Coming soon January 2027." },
 };
 
 // the phone's browser bars start in the Sunset stone's colour (ComingSoon.tsx keeps them in step)
